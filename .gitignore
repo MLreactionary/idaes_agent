@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local environment
+.env
+
+# Runtime outputs
+outputs/
+
+# Mac
+.DS_Store

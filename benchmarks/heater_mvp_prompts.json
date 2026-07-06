@@ -1,0 +1,60 @@
+[
+  {
+    "id": "heat_kelvin_default_flow",
+    "prompt": "Heat a water stream from 300 K to 350 K at 1 bar and report heat duty.",
+    "expect_error": false,
+    "expected_mode": "calculate_heat_duty",
+    "expected_heat_duty_w": 209200.0,
+    "tolerance_abs": 1e-6
+  },
+  {
+    "id": "heat_celsius_default_flow",
+    "prompt": "I have water at 27 C and I want to heat it to 77 C at 1 bar. What heat duty is needed?",
+    "expect_error": false,
+    "expected_mode": "calculate_heat_duty",
+    "expected_heat_duty_w": 209200.0,
+    "tolerance_abs": 1e-6
+  },
+  {
+    "id": "cool_celsius_with_flow",
+    "prompt": "Cool water from 80 C to 30 C at 2 kg/s and report the heat duty.",
+    "expect_error": false,
+    "expected_mode": "calculate_heat_duty",
+    "expected_heat_duty_w": -418400.0,
+    "tolerance_abs": 1e-6
+  },
+  {
+    "id": "heat_kelvin_with_flow",
+    "prompt": "Heat water from 300 K to 330 K at 3 kg/s. Report the heat duty.",
+    "expect_error": false,
+    "expected_mode": "calculate_heat_duty",
+    "expected_heat_duty_w": 376560.0,
+    "tolerance_abs": 1e-6
+  },
+  {
+    "id": "outlet_temperature_from_heat_duty",
+    "prompt": "Water enters at 300 K and receives 100 kW of heat. What is the outlet temperature?",
+    "expect_error": false,
+    "expected_mode": "calculate_outlet_temperature",
+    "expected_temperature_out_k": 323.90057361376674,
+    "tolerance_abs": 1e-6
+  },
+  {
+    "id": "outlet_temperature_with_heat_removed",
+    "prompt": "Water enters at 350 K and 50 kW of heat is removed. What is the outlet temperature?",
+    "expect_error": false,
+    "expected_mode": "calculate_outlet_temperature",
+    "expected_temperature_out_k": 338.04971319311664,
+    "tolerance_abs": 1e-6
+  },
+  {
+    "id": "unsupported_flash",
+    "prompt": "Flash a methane ethane mixture at 300 K and 1 bar and report vapor fraction.",
+    "expect_error": true
+  },
+  {
+    "id": "unsupported_reactor",
+    "prompt": "Model a reactor converting A to B with first-order kinetics.",
+    "expect_error": true
+  }
+]

@@ -1,0 +1,9 @@
+pyomo
+idaes-pse
+pandas
+pydantic
+sqlalchemy
+python-dotenv
+rich
+pytest
+openai
