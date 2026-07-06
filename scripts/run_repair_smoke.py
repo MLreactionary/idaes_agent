@@ -76,9 +76,14 @@ def main():
         (run_dir / "repair_attempt_1_trace.json").read_text(encoding="utf-8")
     )
 
+    allowed_patch_strategies = {
+        "minimal_import_patch_from_llm_candidate",
+        "minimal_import_patch_deterministic",
+    }
+
     checks.append({
         "name": "patch_strategy",
-        "passed": trace.get("patch_strategy") == "minimal_import_patch_from_llm_candidate",
+        "passed": trace.get("patch_strategy") in allowed_patch_strategies,
         "value": trace.get("patch_strategy")
     })
 

@@ -32,3 +32,21 @@ def main():
 """
 
     validate_patched_code(code)
+
+
+def test_choose_safe_patch_repairs_pyomox_import_without_trusting_candidate():
+    from app.repair import choose_safe_patch
+
+    original_code = "import json\nimport traceback\nimport pyomox.environ as pyo\n"
+    candidate_code = "print('bad candidate without pyomo import')"
+
+    patched_code, strategy = choose_safe_patch(
+        original_code=original_code,
+        candidate_code=candidate_code,
+        stdout="",
+        stderr="ModuleNotFoundError: No module named pyomox"
+    )
+
+    assert "import pyomo.environ as pyo" in patched_code
+    assert "import pyomox.environ as pyo" not in patched_code
+    assert strategy == "minimal_import_patch_deterministic"

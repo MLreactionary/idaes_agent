@@ -56,6 +56,14 @@
     "tolerance_abs": 1e-06
   },
   {
+    "id": "mass_flow_from_heat_duty_and_temperature_rise",
+    "prompt": "I need to heat water from 25 C to 80 C using 100 kW. What mass flow rate can I process?",
+    "expect_error": false,
+    "expected_mode": "calculate_mass_flow",
+    "expected_mass_flow_kg_s": 0.4345558838866678,
+    "tolerance_abs": 1e-06
+  },
+  {
     "id": "unsupported_flash",
     "prompt": "Flash a methane ethane mixture at 300 K and 1 bar and report vapor fraction.",
     "expect_error": true

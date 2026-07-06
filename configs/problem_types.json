@@ -5,12 +5,11 @@
       "description": "Single-stream heater or cooler using Q = m_dot * Cp * (Tout - Tin). This is a controlled MVP model and does not perform real thermodynamic property calculations.",
       "backend": "pyomo",
       "scaffold": "scaffolds/heater_energy_balance.py.template",
-
       "supported_modes": [
         "calculate_heat_duty",
-        "calculate_outlet_temperature"
+        "calculate_outlet_temperature",
+        "calculate_mass_flow"
       ],
-
       "defaults": {
         "material": "water",
         "flow_basis": "mass",
@@ -18,7 +17,6 @@
         "cp_j_kg_k": 4184.0,
         "pressure_pa": 100000.0
       },
-
       "required_fields_by_mode": {
         "calculate_heat_duty": [
           "mode",
@@ -29,12 +27,17 @@
           "mode",
           "temperature_in_k",
           "heat_duty_w"
+        ],
+        "calculate_mass_flow": [
+          "mode",
+          "temperature_in_k",
+          "temperature_out_k",
+          "heat_duty_w"
         ]
       },
-
       "field_ranges": {
         "mass_flow_kg_s": {
-          "min": 1e-9,
+          "min": 1e-09,
           "max": 10000.0
         },
         "cp_j_kg_k": {
@@ -58,7 +61,6 @@
           "max": 1000000000.0
         }
       },
-
       "verifier": {
         "required_result_fields": [
           "problem_type",
@@ -71,8 +73,8 @@
           "temperature_out_k",
           "heat_duty_w"
         ],
-        "energy_balance_abs_tolerance_w": 1e-6,
-        "temperature_abs_tolerance_k": 1e-6,
+        "energy_balance_abs_tolerance_w": 1e-06,
+        "temperature_abs_tolerance_k": 1e-06,
         "allowed_solver_statuses": [
           "ok"
         ],

@@ -78,3 +78,31 @@ def test_reconcile_rich_engineering_units():
     assert "temperature_out_k" in changed_fields
     assert "pressure_pa" in changed_fields
     assert "cp_j_kg_k" in changed_fields
+
+
+def test_reconcile_infers_calculate_mass_flow_mode():
+    spec = {
+        "problem_type": "heater_energy_balance",
+        "mode": "calculate_heat_duty",
+        "material": "water",
+        "flow_basis": "mass",
+        "mass_flow_kg_s": 1.0,
+        "cp_j_kg_k": 4184.0,
+        "pressure_pa": 100000.0,
+        "temperature_in_k": 300.0,
+        "temperature_out_k": 350.0,
+    }
+
+    prompt = "I need to heat water from 25 C to 80 C using 100 kW. What mass flow rate can I process?"
+
+    reconciled, changes = reconcile_spec_with_prompt(spec, prompt)
+
+    assert reconciled["mode"] == "calculate_mass_flow"
+    assert abs(reconciled["temperature_in_k"] - 298.15) < 1e-12
+    assert abs(reconciled["temperature_out_k"] - 353.15) < 1e-12
+    assert abs(reconciled["heat_duty_w"] - 100000.0) < 1e-12
+
+    changed_fields = {change["field"] for change in changes}
+
+    assert "mode" in changed_fields
+    assert "heat_duty_w" in changed_fields

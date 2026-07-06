@@ -297,6 +297,28 @@ def extract_heat_duty_w(prompt: str) -> float | None:
     return heat_duty_w
 
 
+
+def prompt_requests_mass_flow(prompt: str) -> bool:
+    prompt_lower = prompt.lower()
+
+    markers = [
+        "mass flow",
+        "flow rate",
+        "required flow",
+        "required mass",
+        "what flow",
+        "how much water",
+        "how much material",
+        "can i process",
+        "can we process",
+        "throughput",
+        "kg/s can",
+        "kg/hr can"
+    ]
+
+    return any(marker in prompt_lower for marker in markers)
+
+
 def _record_change(changes: list[dict], field: str, old_value, new_value, reason: str):
     if old_value != new_value:
         changes.append(
@@ -321,8 +343,52 @@ def reconcile_spec_with_prompt(spec: dict, prompt: str) -> tuple[dict, list[dict
     changes = []
 
     temperatures_k = extract_temperatures_k(prompt)
+    heat_duty_w_for_mode = extract_heat_duty_w(prompt)
 
-    if len(temperatures_k) >= 1 and "temperature_in_k" in reconciled:
+    if (
+        prompt_requests_mass_flow(prompt)
+        and len(temperatures_k) >= 2
+        and heat_duty_w_for_mode is not None
+    ):
+        old_value = reconciled.get("mode")
+        new_value = "calculate_mass_flow"
+        reconciled["mode"] = new_value
+        _record_change(
+            changes,
+            "mode",
+            old_value,
+            new_value,
+            "Prompt asks for mass flow and provides temperatures plus heat duty."
+        )
+
+    if len(temperatures_k) >= 1:
+        old_value = reconciled.get("temperature_in_k")
+        new_value = temperatures_k[0]
+        reconciled["temperature_in_k"] = new_value
+        _record_change(
+            changes,
+            "temperature_in_k",
+            old_value,
+            new_value,
+            "Explicitly parsed from original prompt."
+        )
+
+    if len(temperatures_k) >= 2 and reconciled.get("mode") in {"calculate_heat_duty", "calculate_mass_flow"}:
+        old_value = reconciled.get("temperature_out_k")
+        new_value = temperatures_k[1]
+        reconciled["temperature_out_k"] = new_value
+        _record_change(
+            changes,
+            "temperature_out_k",
+            old_value,
+            new_value,
+            "Explicitly parsed from original prompt."
+        )
+
+    # Older code below may also try to reconcile temperatures.
+    # It is left harmless because _record_change only records real changes.
+
+    if False and len(temperatures_k) >= 1 and "temperature_in_k" in reconciled:
         old_value = reconciled.get("temperature_in_k")
         new_value = temperatures_k[0]
         reconciled["temperature_in_k"] = new_value
@@ -391,7 +457,7 @@ def reconcile_spec_with_prompt(spec: dict, prompt: str) -> tuple[dict, list[dict
 
     heat_duty_w = extract_heat_duty_w(prompt)
 
-    if heat_duty_w is not None and reconciled.get("mode") == "calculate_outlet_temperature":
+    if heat_duty_w is not None and reconciled.get("mode") in {"calculate_outlet_temperature", "calculate_mass_flow"}:
         old_value = reconciled.get("heat_duty_w")
         reconciled["heat_duty_w"] = heat_duty_w
         _record_change(
