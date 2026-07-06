@@ -23,7 +23,10 @@ def _format_assumptions(spec: dict) -> list[str]:
         assumptions.append("Material was assumed to be water.")
 
     if spec.get("mass_flow_kg_s") == 1.0:
-        assumptions.append("Mass flow rate was assumed to be 1.0 kg/s if not explicitly specified.")
+        if spec.get("mode") == "calculate_mass_flow":
+            assumptions.append("Mass flow rate was solved from heat duty, heat capacity, and temperature change.")
+        else:
+            assumptions.append("Mass flow rate was assumed to be 1.0 kg/s if not explicitly specified.")
 
     if spec.get("cp_j_kg_k") == 4184.0:
         assumptions.append("Constant heat capacity was assumed as 4184 J/kg/K.")
