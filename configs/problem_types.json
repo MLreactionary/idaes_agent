@@ -82,6 +82,94 @@
           "optimal"
         ]
       }
+    },
+    "adiabatic_mixer": {
+      "name": "Adiabatic Two-Stream Mixer",
+      "description": "Two inlet streams mix adiabatically. Outlet temperature is computed from a mass-flow-weighted sensible enthalpy balance.",
+      "backend": "pyomo",
+      "scaffold": "scaffolds/adiabatic_mixer.py.template",
+      "supported_modes": [
+        "calculate_outlet_temperature"
+      ],
+      "defaults": {
+        "material": "water",
+        "flow_basis": "mass",
+        "stream1_cp_j_kg_k": 4184.0,
+        "stream2_cp_j_kg_k": 4184.0,
+        "pressure_pa": 100000.0
+      },
+      "required_fields_by_mode": {
+        "calculate_outlet_temperature": [
+          "mode",
+          "stream1_mass_flow_kg_s",
+          "stream1_temperature_k",
+          "stream2_mass_flow_kg_s",
+          "stream2_temperature_k"
+        ]
+      },
+      "field_ranges": {
+        "stream1_mass_flow_kg_s": {
+          "min": 1e-09,
+          "max": 10000.0
+        },
+        "stream2_mass_flow_kg_s": {
+          "min": 1e-09,
+          "max": 10000.0
+        },
+        "stream1_cp_j_kg_k": {
+          "min": 100.0,
+          "max": 10000.0
+        },
+        "stream2_cp_j_kg_k": {
+          "min": 100.0,
+          "max": 10000.0
+        },
+        "stream1_temperature_k": {
+          "min": 250.0,
+          "max": 650.0
+        },
+        "stream2_temperature_k": {
+          "min": 250.0,
+          "max": 650.0
+        },
+        "outlet_temperature_k": {
+          "min": 250.0,
+          "max": 650.0
+        },
+        "temperature_out_k": {
+          "min": 250.0,
+          "max": 650.0
+        },
+        "pressure_pa": {
+          "min": 10000.0,
+          "max": 10000000.0
+        }
+      },
+      "verifier": {
+        "required_result_fields": [
+          "problem_type",
+          "mode",
+          "solver_status",
+          "termination_condition",
+          "stream1_mass_flow_kg_s",
+          "stream1_temperature_k",
+          "stream1_cp_j_kg_k",
+          "stream2_mass_flow_kg_s",
+          "stream2_temperature_k",
+          "stream2_cp_j_kg_k",
+          "outlet_temperature_k",
+          "temperature_out_k",
+          "energy_balance_residual_w"
+        ],
+        "energy_balance_abs_tolerance_w": 1e-06,
+        "temperature_abs_tolerance_k": 1e-06,
+        "allowed_solver_statuses": [
+          "ok"
+        ],
+        "allowed_termination_conditions": [
+          "optimal"
+        ]
+      }
     }
   }
 }

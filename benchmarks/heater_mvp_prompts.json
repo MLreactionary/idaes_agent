@@ -64,6 +64,14 @@
     "tolerance_abs": 1e-06
   },
   {
+    "id": "adiabatic_mixer_two_water_streams",
+    "prompt": "Mix 1 kg/s of water at 300 K with 2 kg/s of water at 360 K. What is the outlet temperature?",
+    "expect_error": false,
+    "expected_mode": "calculate_outlet_temperature",
+    "expected_temperature_out_k": 340.0,
+    "tolerance_abs": 1e-06
+  },
+  {
     "id": "unsupported_flash",
     "prompt": "Flash a methane ethane mixture at 300 K and 1 bar and report vapor fraction.",
     "expect_error": true
