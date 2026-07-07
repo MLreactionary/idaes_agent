@@ -1,103 +1,54 @@
 {
   "problem_types": {
-    "heater_energy_balance": {
-      "name": "Heater/Cooler Sensible Heat Energy Balance",
-      "description": "Single-stream heater or cooler using Q = m_dot * Cp * (Tout - Tin). This is a controlled MVP model and does not perform real thermodynamic property calculations.",
+    "adiabatic_mixer": {
       "backend": "pyomo",
-      "scaffold": "scaffolds/heater_energy_balance.py.template",
-      "supported_modes": [
-        "calculate_heat_duty",
-        "calculate_outlet_temperature",
-        "calculate_mass_flow"
-      ],
       "defaults": {
-        "material": "water",
         "flow_basis": "mass",
-        "mass_flow_kg_s": 1.0,
-        "cp_j_kg_k": 4184.0,
-        "pressure_pa": 100000.0
+        "material": "water",
+        "pressure_pa": 100000.0,
+        "stream1_cp_j_kg_k": 4184.0,
+        "stream2_cp_j_kg_k": 4184.0
       },
-      "required_fields_by_mode": {
-        "calculate_heat_duty": [
-          "mode",
-          "temperature_in_k",
-          "temperature_out_k"
-        ],
-        "calculate_outlet_temperature": [
-          "mode",
-          "temperature_in_k",
-          "heat_duty_w"
-        ],
-        "calculate_mass_flow": [
-          "mode",
-          "temperature_in_k",
-          "temperature_out_k",
-          "heat_duty_w"
-        ]
-      },
+      "description": "Two inlet streams mix adiabatically. Outlet temperature is computed from a mass-flow-weighted sensible enthalpy balance.",
       "field_ranges": {
-        "mass_flow_kg_s": {
-          "min": 1e-09,
-          "max": 10000.0
-        },
-        "cp_j_kg_k": {
-          "min": 100.0,
-          "max": 10000.0
-        },
-        "temperature_in_k": {
-          "min": 250.0,
-          "max": 650.0
-        },
-        "temperature_out_k": {
-          "min": 250.0,
-          "max": 650.0
+        "outlet_temperature_k": {
+          "max": 650.0,
+          "min": 250.0
         },
         "pressure_pa": {
-          "min": 10000.0,
-          "max": 10000000.0
+          "max": 10000000.0,
+          "min": 10000.0
         },
-        "heat_duty_w": {
-          "min": -1000000000.0,
-          "max": 1000000000.0
+        "stream1_cp_j_kg_k": {
+          "max": 10000.0,
+          "min": 100.0
+        },
+        "stream1_mass_flow_kg_s": {
+          "max": 10000.0,
+          "min": 1e-09
+        },
+        "stream1_temperature_k": {
+          "max": 650.0,
+          "min": 250.0
+        },
+        "stream2_cp_j_kg_k": {
+          "max": 10000.0,
+          "min": 100.0
+        },
+        "stream2_mass_flow_kg_s": {
+          "max": 10000.0,
+          "min": 1e-09
+        },
+        "stream2_temperature_k": {
+          "max": 650.0,
+          "min": 250.0
+        },
+        "temperature_out_k": {
+          "max": 650.0,
+          "min": 250.0
         }
       },
-      "verifier": {
-        "required_result_fields": [
-          "problem_type",
-          "mode",
-          "solver_status",
-          "termination_condition",
-          "mass_flow_kg_s",
-          "cp_j_kg_k",
-          "temperature_in_k",
-          "temperature_out_k",
-          "heat_duty_w"
-        ],
-        "energy_balance_abs_tolerance_w": 1e-06,
-        "temperature_abs_tolerance_k": 1e-06,
-        "allowed_solver_statuses": [
-          "ok"
-        ],
-        "allowed_termination_conditions": [
-          "optimal"
-        ]
-      }
-    },
-    "adiabatic_mixer": {
       "name": "Adiabatic Two-Stream Mixer",
-      "description": "Two inlet streams mix adiabatically. Outlet temperature is computed from a mass-flow-weighted sensible enthalpy balance.",
-      "backend": "pyomo",
-      "scaffold": "scaffolds/adiabatic_mixer.py.template",
-      "supported_modes": [
-        "calculate_outlet_temperature"
-      ],
-      "defaults": {
-        "material": "water",
-        "flow_basis": "mass",
-        "stream1_cp_j_kg_k": 4184.0,
-        "stream2_cp_j_kg_k": 4184.0,
-        "pressure_pa": 100000.0
-      },
       "required_fields_by_mode": {
         "calculate_outlet_temperature": [
           "mode",
@@ -107,45 +58,18 @@
           "stream2_temperature_k"
         ]
       },
-      "field_ranges": {
-        "stream1_mass_flow_kg_s": {
-          "min": 1e-09,
-          "max": 10000.0
-        },
-        "stream2_mass_flow_kg_s": {
-          "min": 1e-09,
-          "max": 10000.0
-        },
-        "stream1_cp_j_kg_k": {
-          "min": 100.0,
-          "max": 10000.0
-        },
-        "stream2_cp_j_kg_k": {
-          "min": 100.0,
-          "max": 10000.0
-        },
-        "stream1_temperature_k": {
-          "min": 250.0,
-          "max": 650.0
-        },
-        "stream2_temperature_k": {
-          "min": 250.0,
-          "max": 650.0
-        },
-        "outlet_temperature_k": {
-          "min": 250.0,
-          "max": 650.0
-        },
-        "temperature_out_k": {
-          "min": 250.0,
-          "max": 650.0
-        },
-        "pressure_pa": {
-          "min": 10000.0,
-          "max": 10000000.0
-        }
-      },
+      "scaffold": "scaffolds/adiabatic_mixer.py.template",
+      "supported_modes": [
+        "calculate_outlet_temperature"
+      ],
       "verifier": {
+        "allowed_solver_statuses": [
+          "ok"
+        ],
+        "allowed_termination_conditions": [
+          "optimal"
+        ],
+        "energy_balance_abs_tolerance_w": 1e-06,
         "required_result_fields": [
           "problem_type",
           "mode",
@@ -161,13 +85,155 @@
           "temperature_out_k",
           "energy_balance_residual_w"
         ],
-        "energy_balance_abs_tolerance_w": 1e-06,
-        "temperature_abs_tolerance_k": 1e-06,
+        "temperature_abs_tolerance_k": 1e-06
+      }
+    },
+    "heater_energy_balance": {
+      "backend": "pyomo",
+      "defaults": {
+        "cp_j_kg_k": 4184.0,
+        "flow_basis": "mass",
+        "mass_flow_kg_s": 1.0,
+        "material": "water",
+        "pressure_pa": 100000.0
+      },
+      "description": "Single-stream heater or cooler using Q = m_dot * Cp * (Tout - Tin). This is a controlled MVP model and does not perform real thermodynamic property calculations.",
+      "field_ranges": {
+        "cp_j_kg_k": {
+          "max": 10000.0,
+          "min": 100.0
+        },
+        "heat_duty_w": {
+          "max": 1000000000.0,
+          "min": -1000000000.0
+        },
+        "mass_flow_kg_s": {
+          "max": 10000.0,
+          "min": 1e-09
+        },
+        "pressure_pa": {
+          "max": 10000000.0,
+          "min": 10000.0
+        },
+        "temperature_in_k": {
+          "max": 650.0,
+          "min": 250.0
+        },
+        "temperature_out_k": {
+          "max": 650.0,
+          "min": 250.0
+        }
+      },
+      "name": "Heater/Cooler Sensible Heat Energy Balance",
+      "required_fields_by_mode": {
+        "calculate_heat_duty": [
+          "mode",
+          "temperature_in_k",
+          "temperature_out_k"
+        ],
+        "calculate_mass_flow": [
+          "mode",
+          "temperature_in_k",
+          "temperature_out_k",
+          "heat_duty_w"
+        ],
+        "calculate_outlet_temperature": [
+          "mode",
+          "temperature_in_k",
+          "heat_duty_w"
+        ]
+      },
+      "scaffold": "scaffolds/heater_energy_balance.py.template",
+      "supported_modes": [
+        "calculate_heat_duty",
+        "calculate_outlet_temperature",
+        "calculate_mass_flow"
+      ],
+      "verifier": {
         "allowed_solver_statuses": [
           "ok"
         ],
         "allowed_termination_conditions": [
           "optimal"
+        ],
+        "energy_balance_abs_tolerance_w": 1e-06,
+        "required_result_fields": [
+          "problem_type",
+          "mode",
+          "solver_status",
+          "termination_condition",
+          "mass_flow_kg_s",
+          "cp_j_kg_k",
+          "temperature_in_k",
+          "temperature_out_k",
+          "heat_duty_w"
+        ],
+        "temperature_abs_tolerance_k": 1e-06
+      }
+    },
+    "splitter_mass_balance": {
+      "backend": "pyomo",
+      "defaults": {
+        "flow_basis": "mass",
+        "material": "water"
+      },
+      "field_ranges": {
+        "inlet_mass_flow_kg_s": {
+          "max": 1000000.0,
+          "min": 0.0
+        },
+        "mass_balance_residual_kg_s": {
+          "max": 1e-06,
+          "min": -1e-06
+        },
+        "outlet1_mass_flow_kg_s": {
+          "max": 1000000.0,
+          "min": 0.0
+        },
+        "outlet1_split_fraction": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "outlet2_mass_flow_kg_s": {
+          "max": 1000000.0,
+          "min": 0.0
+        },
+        "outlet2_split_fraction": {
+          "max": 1.0,
+          "min": 0.0
+        }
+      },
+      "required_fields_by_mode": {
+        "calculate_outlet_flows": [
+          "mode",
+          "inlet_mass_flow_kg_s",
+          "outlet1_split_fraction"
+        ]
+      },
+      "scaffold": "scaffolds/splitter_mass_balance.py.template",
+      "supported_modes": [
+        "calculate_outlet_flows"
+      ],
+      "verifier": {
+        "allowed_solver_statuses": [
+          "ok"
+        ],
+        "allowed_termination_conditions": [
+          "optimal"
+        ],
+        "energy_balance_tolerance_w": 1e-06,
+        "mass_balance_tolerance_kg_s": 1e-06,
+        "required_result_fields": [
+          "problem_type",
+          "mode",
+          "solver_status",
+          "termination_condition",
+          "inlet_mass_flow_kg_s",
+          "outlet1_split_fraction",
+          "outlet2_split_fraction",
+          "outlet1_mass_flow_kg_s",
+          "outlet2_mass_flow_kg_s",
+          "mass_balance_residual_kg_s"
         ]
       }
     }

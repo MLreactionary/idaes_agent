@@ -190,6 +190,14 @@ def _mixer_energy_residual(result: dict) -> float:
         * (float(result["stream2_temperature_k"]) - float(result["outlet_temperature_k"]))
     )
 
+def _splitter_mass_residual(result: dict) -> float:
+    return (
+        float(result["inlet_mass_flow_kg_s"])
+        - float(result["outlet1_mass_flow_kg_s"])
+        - float(result["outlet2_mass_flow_kg_s"])
+    )
+
+
 
 def _check_energy_balance(result: dict, tolerance: float) -> dict:
     problem_type = result.get("problem_type")
@@ -197,35 +205,70 @@ def _check_energy_balance(result: dict, tolerance: float) -> dict:
     try:
         if problem_type == "heater_energy_balance":
             residual = _heater_energy_residual(result)
+            check_name = "energy_balance"
+            success_message = "Energy balance is satisfied."
+            failure_label = "Energy balance"
         elif problem_type == "adiabatic_mixer":
             residual = _mixer_energy_residual(result)
+            check_name = "energy_balance"
+            success_message = "Energy balance is satisfied."
+            failure_label = "Energy balance"
+        elif problem_type == "splitter_mass_balance":
+            residual = _splitter_mass_residual(result)
+            check_name = "mass_balance"
+            success_message = "Mass balance is satisfied."
+            failure_label = "Mass balance"
         else:
             return make_check(
-                "energy_balance",
+                "balance",
                 False,
-                f"No energy-balance verifier implemented for problem_type={problem_type}"
+                f"No balance verifier implemented for problem_type={problem_type}"
             )
     except KeyError as exc:
         return make_check(
-            "energy_balance",
+            "balance",
             False,
-            f"Missing field for energy balance: {exc}"
+            f"Missing field for balance check: {exc}"
         )
 
     passed = abs(residual) <= tolerance
 
     return make_check(
-        "energy_balance",
+        check_name,
         passed,
         (
-            "Energy balance is satisfied."
+            success_message
             if passed
-            else f"Energy balance residual {residual} exceeds tolerance {tolerance}."
+            else f"{failure_label} residual {residual} exceeds tolerance {tolerance}."
         )
     )
 
 
 def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
+    problem_type = result.get("problem_type")
+
+    if problem_type == "splitter_mass_balance":
+        residual = result.get("mass_balance_residual_kg_s")
+
+        if residual is None:
+            return make_check(
+                "reported_mass_residual",
+                False,
+                "Missing reported mass_balance_residual_kg_s."
+            )
+
+        passed = abs(float(residual)) <= tolerance
+
+        return make_check(
+            "reported_mass_residual",
+            passed,
+            (
+                "Reported mass residual is within tolerance."
+                if passed
+                else f"Reported mass residual {residual} exceeds tolerance {tolerance}."
+            )
+        )
+
     residual = result.get("energy_balance_residual_w")
 
     if residual is None:
@@ -258,15 +301,35 @@ def _check_thermal_direction(result: dict) -> dict:
             "Thermal direction check skipped for adiabatic mixer."
         )
 
-    heat_duty_w = float(result.get("heat_duty_w", 0.0))
+    if problem_type == "splitter_mass_balance":
+        return make_check(
+            "thermal_direction",
+            True,
+            "Thermal direction check skipped for splitter mass balance."
+        )
+
+    heat_duty = result.get("heat_duty_w")
+    temperature_in = result.get("temperature_in_k")
+    temperature_out = result.get("temperature_out_k")
     thermal_direction = result.get("thermal_direction")
 
-    if heat_duty_w > 0:
+    if heat_duty is None or temperature_in is None or temperature_out is None:
+        return make_check(
+            "thermal_direction",
+            True,
+            "Thermal direction check skipped because heat-duty fields are not present."
+        )
+
+    delta_t = float(temperature_out) - float(temperature_in)
+
+    if abs(float(heat_duty)) < 1e-9 and abs(delta_t) < 1e-9:
+        expected = "isothermal"
+    elif float(heat_duty) > 0 and delta_t > 0:
         expected = "heating"
-    elif heat_duty_w < 0:
+    elif float(heat_duty) < 0 and delta_t < 0:
         expected = "cooling"
     else:
-        expected = "no_temperature_change"
+        expected = "inconsistent"
 
     passed = thermal_direction == expected
 
@@ -276,7 +339,7 @@ def _check_thermal_direction(result: dict) -> dict:
         (
             f"Thermal direction is consistent: {thermal_direction}"
             if passed
-            else f"Expected thermal_direction={expected}, got {thermal_direction}"
+            else f"Expected thermal_direction {expected}, got {thermal_direction}"
         )
     )
 
