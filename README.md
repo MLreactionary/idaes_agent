@@ -1,5 +1,70 @@
 # IDAES Agent MVP
 
+<!-- CURRENT_STATUS_START -->
+
+## Current Project Status
+
+The short-term MVP sprint is complete.
+
+### Implemented problem families
+
+1. heater_energy_balance
+   - calculate_heat_duty
+   - calculate_outlet_temperature
+   - calculate_mass_flow
+
+2. adiabatic_mixer
+   - calculate_outlet_temperature
+
+3. splitter_mass_balance
+   - calculate_outlet_flows
+
+### Interfaces
+
+The project now supports both command-line and browser-based usage.
+
+CLI:
+
+    python scripts/idaes_cli.py "Split 10 kg/s of water with 30% going to outlet 1. What are the outlet flows?"
+
+Streamlit UI:
+
+    streamlit run scripts/ui_streamlit.py
+
+Full demo:
+
+    python scripts/demo_all.py
+
+Health checks:
+
+    python -m pytest -q
+    python scripts/run_benchmark.py --planner llm
+    python scripts/run_repair_smoke.py
+    python scripts/run_splitter_repair_smoke.py
+    python scripts/demo_all.py
+
+Current expected status:
+
+    35 passed
+    benchmark: 12/12 passed
+    bad import repair smoke: passed
+    splitter repair smoke: passed
+    demo: passed
+
+### Repair coverage
+
+The repair loop now has two controlled repair cases:
+
+1. Generic bad import repair
+   - pyomox -> pyomo
+
+2. Splitter-specific key repair
+   - outlet1_split_fraction_WRONG -> outlet1_split_fraction
+
+<!-- CURRENT_STATUS_END -->
+
+
+
 Autonomous process-modeling agent MVP for small deterministic process-engineering problems.
 
 The system takes a natural-language prompt and runs this loop:
