@@ -20,7 +20,13 @@ def is_mixer_prompt(prompt: str) -> bool:
         "mixer",
         "mixing",
         "combine ",
-        "combined "
+        "combined ",
+        "blend ",
+        "blended ",
+        "blending",
+        "merge ",
+        "merged ",
+        "merging"
     ]
 
     return any(marker in prompt_lower for marker in markers)

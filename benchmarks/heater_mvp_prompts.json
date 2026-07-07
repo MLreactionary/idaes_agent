@@ -1,84 +1,92 @@
 [
   {
+    "expect_error": false,
+    "expected_heat_duty_w": 209200.0,
+    "expected_mode": "calculate_heat_duty",
     "id": "heat_kelvin_default_flow",
     "prompt": "Heat a water stream from 300 K to 350 K at 1 bar and report heat duty.",
-    "expect_error": false,
-    "expected_mode": "calculate_heat_duty",
-    "expected_heat_duty_w": 209200.0,
     "tolerance_abs": 1e-06
   },
   {
+    "expect_error": false,
+    "expected_heat_duty_w": 209200.0,
+    "expected_mode": "calculate_heat_duty",
     "id": "heat_celsius_default_flow",
     "prompt": "I have water at 27 C and I want to heat it to 77 C at 1 bar. What heat duty is needed?",
-    "expect_error": false,
-    "expected_mode": "calculate_heat_duty",
-    "expected_heat_duty_w": 209200.0,
     "tolerance_abs": 1e-06
   },
   {
+    "expect_error": false,
+    "expected_heat_duty_w": -418400.0,
+    "expected_mode": "calculate_heat_duty",
     "id": "cool_celsius_with_flow",
     "prompt": "Cool water from 80 C to 30 C at 2 kg/s and report the heat duty.",
-    "expect_error": false,
-    "expected_mode": "calculate_heat_duty",
-    "expected_heat_duty_w": -418400.0,
     "tolerance_abs": 1e-06
   },
   {
+    "expect_error": false,
+    "expected_heat_duty_w": 376560.0,
+    "expected_mode": "calculate_heat_duty",
     "id": "heat_kelvin_with_flow",
     "prompt": "Heat water from 300 K to 330 K at 3 kg/s. Report the heat duty.",
-    "expect_error": false,
-    "expected_mode": "calculate_heat_duty",
-    "expected_heat_duty_w": 376560.0,
     "tolerance_abs": 1e-06
   },
   {
-    "id": "outlet_temperature_from_heat_duty",
-    "prompt": "Water enters at 300 K and receives 100 kW of heat. What is the outlet temperature?",
     "expect_error": false,
     "expected_mode": "calculate_outlet_temperature",
     "expected_temperature_out_k": 323.90057361376677,
+    "id": "outlet_temperature_from_heat_duty",
+    "prompt": "Water enters at 300 K and receives 100 kW of heat. What is the outlet temperature?",
     "tolerance_abs": 1e-06
   },
   {
-    "id": "outlet_temperature_with_heat_removed",
-    "prompt": "Water enters at 350 K and 50 kW of heat is removed. What is the outlet temperature?",
     "expect_error": false,
     "expected_mode": "calculate_outlet_temperature",
     "expected_temperature_out_k": 338.04971319311665,
+    "id": "outlet_temperature_with_heat_removed",
+    "prompt": "Water enters at 350 K and 50 kW of heat is removed. What is the outlet temperature?",
     "tolerance_abs": 1e-06
   },
   {
+    "expect_error": false,
+    "expected_heat_duty_w": 229900.0,
+    "expected_mode": "calculate_heat_duty",
     "id": "heat_rich_units_kg_hr_kj_cp",
     "prompt": "Heat 3600 kg/hr of water from 25 C to 80 C at 101.325 kPa using Cp = 4.18 kJ/kg/K. Report heat duty.",
-    "expect_error": false,
-    "expected_mode": "calculate_heat_duty",
-    "expected_heat_duty_w": 229900.0,
     "tolerance_abs": 1e-06
   },
   {
+    "expect_error": false,
+    "expected_mass_flow_kg_s": 0.4345558838866678,
+    "expected_mode": "calculate_mass_flow",
     "id": "mass_flow_from_heat_duty_and_temperature_rise",
     "prompt": "I need to heat water from 25 C to 80 C using 100 kW. What mass flow rate can I process?",
-    "expect_error": false,
-    "expected_mode": "calculate_mass_flow",
-    "expected_mass_flow_kg_s": 0.4345558838866678,
     "tolerance_abs": 1e-06
   },
   {
-    "id": "adiabatic_mixer_two_water_streams",
-    "prompt": "Mix 1 kg/s of water at 300 K with 2 kg/s of water at 360 K. What is the outlet temperature?",
     "expect_error": false,
     "expected_mode": "calculate_outlet_temperature",
     "expected_temperature_out_k": 340.0,
+    "id": "adiabatic_mixer_two_water_streams",
+    "prompt": "Mix 1 kg/s of water at 300 K with 2 kg/s of water at 360 K. What is the outlet temperature?",
     "tolerance_abs": 1e-06
   },
   {
+    "expect_error": true,
     "id": "unsupported_flash",
-    "prompt": "Flash a methane ethane mixture at 300 K and 1 bar and report vapor fraction.",
-    "expect_error": true
+    "prompt": "Flash a methane ethane mixture at 300 K and 1 bar and report vapor fraction."
   },
   {
+    "expect_error": true,
     "id": "unsupported_reactor",
-    "prompt": "Model a reactor converting A to B with first-order kinetics.",
-    "expect_error": true
+    "prompt": "Model a reactor converting A to B with first-order kinetics."
+  },
+  {
+    "expected_mode": "calculate_outlet_temperature",
+    "expected_problem_type": "adiabatic_mixer",
+    "expected_temperature_out_k": 314.81666666666666,
+    "id": "adiabatic_mixer_rich_units_celsius_kg_hr",
+    "prompt": "Blend 3600 kg/hr of water at 25 C with 0.5 kg/s of water at 75 C. What is the outlet temperature?",
+    "tolerance_abs": 1e-06
   }
 ]

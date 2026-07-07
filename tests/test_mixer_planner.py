@@ -42,3 +42,22 @@ def test_plan_mixer_problem_celsius():
 
     assert abs(spec["stream1_temperature_k"] - 298.15) < 1e-12
     assert abs(spec["stream2_temperature_k"] - 348.15) < 1e-12
+
+
+def test_detects_blend_prompt_as_mixer():
+    assert is_mixer_prompt(
+        "Blend 3600 kg/hr of water at 25 C with 0.5 kg/s of water at 75 C."
+    )
+
+
+def test_mixer_rich_units_celsius_and_kg_hr():
+    spec = plan_mixer_problem(
+        "Blend 3600 kg/hr of water at 25 C with 0.5 kg/s of water at 75 C. What is the outlet temperature?"
+    )
+
+    assert spec["problem_type"] == "adiabatic_mixer"
+    assert spec["mode"] == "calculate_outlet_temperature"
+    assert abs(spec["stream1_mass_flow_kg_s"] - 1.0) < 1e-9
+    assert abs(spec["stream2_mass_flow_kg_s"] - 0.5) < 1e-9
+    assert abs(spec["stream1_temperature_k"] - 298.15) < 1e-9
+    assert abs(spec["stream2_temperature_k"] - 348.15) < 1e-9
