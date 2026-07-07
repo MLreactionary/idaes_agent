@@ -63,7 +63,7 @@ def choose_planner(prompt: str, planner: str, run_dir: Path) -> dict:
     raise ValueError(f"Unknown planner: {planner}")
 
 
-def inject_controlled_bug(model_path: Path, run_dir: Path) -> None:
+def inject_controlled_bug(model_path: Path, run_dir: Path, bug_type: str = "bad_import") -> None:
     """
     Intentionally break generated_model.py for controlled repair testing.
 
@@ -78,20 +78,30 @@ def inject_controlled_bug(model_path: Path, run_dir: Path) -> None:
     model_path = Path(model_path)
     code = model_path.read_text(encoding="utf-8")
 
-    target = "import pyomo.environ as pyo"
-    replacement = "import pyomox.environ as pyo"
+    if bug_type == "bad_import":
+        target = "import pyomo.environ as pyo"
+        replacement = "import pyomox.environ as pyo"
+        description = "Changed pyomo import to pyomox import to force execution failure."
+
+    elif bug_type == "splitter_wrong_split_key":
+        target = 'spec["outlet1_split_fraction"]'
+        replacement = 'spec["outlet1_split_fraction_WRONG"]'
+        description = "Changed splitter structured-spec key to force a family-specific execution failure."
+
+    else:
+        raise RuntimeError(f"Unknown controlled bug type: {bug_type}")
 
     if target not in code:
         raise RuntimeError(
-            f"Could not inject bug because target import was not found: {target}"
+            f"Could not inject bug_type={bug_type} because target was not found: {target}"
         )
 
     broken_code = code.replace(target, replacement, 1)
     model_path.write_text(broken_code, encoding="utf-8")
 
     bug_record = {
-        "bug_type": "bad_import",
-        "description": "Changed pyomo import to pyomox import to force execution failure.",
+        "bug_type": bug_type,
+        "description": description,
         "target": target,
         "replacement": replacement
     }
@@ -162,7 +172,8 @@ def run_problem(
     explain: bool = False,
     repair: bool = False,
     inject_bug: bool = False,
-    max_repair_attempts: int = 1
+    max_repair_attempts: int = 1,
+    inject_bug_type: str = "bad_import"
 ) -> dict:
     run_id = make_run_id()
     run_dir = PROJECT_ROOT / "outputs" / "runs" / run_id
@@ -178,7 +189,8 @@ def run_problem(
                 "explain": explain,
                 "repair": repair,
                 "inject_bug": inject_bug,
-                "max_repair_attempts": max_repair_attempts
+                "max_repair_attempts": max_repair_attempts,
+                "inject_bug_type": inject_bug_type
             },
             indent=2,
             sort_keys=True
@@ -199,7 +211,11 @@ def run_problem(
         model_path = write_generated_model(spec, run_dir)
 
         if inject_bug:
-            inject_controlled_bug(model_path=model_path, run_dir=run_dir)
+            inject_controlled_bug(
+                model_path=model_path,
+                run_dir=run_dir,
+                bug_type=inject_bug_type
+            )
 
         upsert_run(
             run_id=run_id,
@@ -288,6 +304,7 @@ def run_problem(
             "explain": explain,
             "repair": repair,
             "inject_bug": inject_bug,
+            "inject_bug_type": inject_bug_type,
             "repair_attempts_used": repair_attempts_used,
             "status": "verified" if verification["verified"] else "failed_verification",
             "verified": verification["verified"],
@@ -313,6 +330,7 @@ def run_problem(
                     "explain": explain,
                     "repair": repair,
                     "inject_bug": inject_bug,
+                    "inject_bug_type": inject_bug_type,
                     "error_type": type(exc).__name__,
                     "error_message": str(exc)
                 },
@@ -362,6 +380,12 @@ def main():
         default=1,
         help="Maximum number of repair attempts. Default: 1."
     )
+    parser.add_argument(
+        "--inject-bug-type",
+        choices=["bad_import", "splitter_wrong_split_key"],
+        default="bad_import",
+        help="Controlled bug type to inject when --inject-bug is used."
+    )
     parser.add_argument("prompt", nargs="+")
 
     args = parser.parse_args()
@@ -373,7 +397,8 @@ def main():
         explain=args.explain,
         repair=args.repair,
         inject_bug=args.inject_bug,
-        max_repair_attempts=args.max_repair_attempts
+        max_repair_attempts=args.max_repair_attempts,
+        inject_bug_type=args.inject_bug_type
     )
 
     print("")

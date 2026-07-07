@@ -87,6 +87,17 @@ def choose_safe_patch(
         )
         return patched, "minimal_import_patch_deterministic"
 
+    # Controlled splitter repair:
+    # The injected splitter bug changes the required structured-spec key.
+    # Apply the exact minimal key repair instead of trusting a full rewrite.
+    if 'spec["outlet1_split_fraction_WRONG"]' in original_code:
+        patched = original_code.replace(
+            'spec["outlet1_split_fraction_WRONG"]',
+            'spec["outlet1_split_fraction"]',
+            1
+        )
+        return patched, "minimal_splitter_key_patch_deterministic"
+
     # If a future candidate clearly fixes pyomox, still constrain the edit to
     # the original file instead of accepting the full rewrite.
     if (
@@ -184,13 +195,20 @@ def repair_generated_model(
         timed_out=execution_result.timed_out
     )
 
-    # For the controlled repair-smoke bug, avoid an LLM call entirely.
+    # For controlled repair-smoke bugs, avoid an LLM call entirely.
     # This keeps CI/smoke tests stable even if Ollama is slow or unavailable.
     if "import pyomox.environ as pyo" in generated_code:
         raw_response = (
             "DETERMINISTIC_REPAIR_NO_LLM_CALL\n"
             "Known controlled bug detected: import pyomox.environ as pyo.\n"
             "Backend will apply minimal import patch."
+        )
+        candidate_code = generated_code
+    elif 'spec["outlet1_split_fraction_WRONG"]' in generated_code:
+        raw_response = (
+            "DETERMINISTIC_REPAIR_NO_LLM_CALL\n"
+            "Known controlled splitter bug detected: outlet1_split_fraction_WRONG.\n"
+            "Backend will apply minimal splitter key patch."
         )
         candidate_code = generated_code
     else:
