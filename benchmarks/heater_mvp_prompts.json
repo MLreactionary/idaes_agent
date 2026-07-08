@@ -136,5 +136,33 @@
       }
     ],
     "prompt": "Optimize a blend of 100 kg product using source A cost 2 $/kg sulfur 1% ash 2%, source B cost 1 $/kg sulfur 5% ash 1%, and source C cost 1.5 $/kg sulfur 2% ash 3%. Final sulfur must be at most 3% and ash must be at most 2%. Minimize cost."
+  },
+  {
+    "expected_mode": "minimize_cost_with_emissions_cap",
+    "expected_problem_type": "utility_emissions_optimization",
+    "id": "utility_emissions_optimization",
+    "numeric_expectations": [
+      {
+        "expected": 2,
+        "field": "number_of_utilities"
+      },
+      {
+        "expected": 500.0,
+        "field": "total_heat_kwh"
+      },
+      {
+        "expected": 30.6666666666667,
+        "field": "total_cost"
+      },
+      {
+        "expected": 60.0,
+        "field": "total_emissions_kg_co2"
+      },
+      {
+        "expected": 0.0,
+        "field": "emissions_violation_kg_co2"
+      }
+    ],
+    "prompt": "A process needs 500 kW of heat for 1 hr. Steam cost 0.04 $/kWh emissions 0.2 kg CO2/kWh, and electric heat cost 0.08 $/kWh emissions 0.05 kg CO2/kWh. Emissions must be at most 60 kg CO2/hr. Minimize cost."
   }
 ]

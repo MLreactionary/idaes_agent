@@ -1,0 +1,154 @@
+"""
+Generated utility emissions optimization model.
+
+Minimize heating utility cost while meeting heat demand and emissions cap.
+"""
+
+import json
+import traceback
+
+import pyomo.environ as pyo
+
+
+SPEC = {{SPEC_JSON}}
+
+
+def build_model(spec):
+    model = pyo.ConcreteModel(name="utility_emissions_optimization")
+
+    if spec["mode"] != "minimize_cost_with_emissions_cap":
+        raise ValueError(f"Unsupported mode: {spec['mode']}")
+
+    utility_names = [utility["name"] for utility in spec["utilities"]]
+
+    model.UTILITIES = pyo.Set(initialize=utility_names)
+    model.heat_kwh = pyo.Var(model.UTILITIES, domain=pyo.NonNegativeReals)
+
+    heat_demand_kwh = float(spec["heat_demand_kwh"])
+    emissions_cap_kg_co2 = float(spec["emissions_cap_kg_co2"])
+
+    cost_by_utility = {
+        utility["name"]: float(utility["cost_per_kwh"])
+        for utility in spec["utilities"]
+    }
+
+    emissions_by_utility = {
+        utility["name"]: float(utility["emissions_kg_co2_per_kwh"])
+        for utility in spec["utilities"]
+    }
+
+    def objective_rule(m):
+        return sum(cost_by_utility[u] * m.heat_kwh[u] for u in m.UTILITIES)
+
+    model.total_cost_objective = pyo.Objective(rule=objective_rule, sense=pyo.minimize)
+
+    def heat_demand_rule(m):
+        return sum(m.heat_kwh[u] for u in m.UTILITIES) == heat_demand_kwh
+
+    model.heat_demand_constraint = pyo.Constraint(rule=heat_demand_rule)
+
+    def emissions_cap_rule(m):
+        return (
+            sum(emissions_by_utility[u] * m.heat_kwh[u] for u in m.UTILITIES)
+            <= emissions_cap_kg_co2
+        )
+
+    model.emissions_cap_constraint = pyo.Constraint(rule=emissions_cap_rule)
+
+    return model
+
+
+def solve_model(model, spec):
+    solver_name = spec.get("optimization_solver", "glpk")
+    solver = pyo.SolverFactory(solver_name)
+
+    if not solver.available(False):
+        raise RuntimeError(f"Required optimization solver is not available: {solver_name}")
+
+    result = solver.solve(model)
+    return solver_name, result
+
+
+def extract_results(model, spec, solver_name, solver_result):
+    heat_demand_kwh = float(spec["heat_demand_kwh"])
+    emissions_cap_kg_co2 = float(spec["emissions_cap_kg_co2"])
+
+    utility_results = []
+
+    for utility in spec["utilities"]:
+        name = utility["name"]
+        heat_kwh = pyo.value(model.heat_kwh[name])
+        cost_per_kwh = float(utility["cost_per_kwh"])
+        emissions_kg_co2_per_kwh = float(utility["emissions_kg_co2_per_kwh"])
+
+        utility_results.append(
+            {
+                "name": name,
+                "heat_kwh": heat_kwh,
+                "cost_per_kwh": cost_per_kwh,
+                "emissions_kg_co2_per_kwh": emissions_kg_co2_per_kwh,
+                "cost": cost_per_kwh * heat_kwh,
+                "emissions_kg_co2": emissions_kg_co2_per_kwh * heat_kwh
+            }
+        )
+
+    total_heat_kwh = sum(utility["heat_kwh"] for utility in utility_results)
+    total_cost = sum(utility["cost"] for utility in utility_results)
+    total_emissions_kg_co2 = sum(utility["emissions_kg_co2"] for utility in utility_results)
+
+    result = {
+        "problem_type": spec["problem_type"],
+        "mode": spec["mode"],
+        "backend": "pyomo",
+        "solver_name": solver_name,
+        "optimization_solver": solver_name,
+        "solver_status": "ok",
+        "termination_condition": str(solver_result.solver.termination_condition),
+
+        "heat_demand_kwh": heat_demand_kwh,
+        "total_heat_kwh": total_heat_kwh,
+        "heat_balance_residual_kwh": heat_demand_kwh - total_heat_kwh,
+
+        "number_of_utilities": len(utility_results),
+        "utility_results": utility_results,
+
+        "emissions_cap_kg_co2": emissions_cap_kg_co2,
+        "total_emissions_kg_co2": total_emissions_kg_co2,
+        "emissions_slack_kg_co2": emissions_cap_kg_co2 - total_emissions_kg_co2,
+        "emissions_violation_kg_co2": max(total_emissions_kg_co2 - emissions_cap_kg_co2, 0.0),
+
+        "total_cost": total_cost
+    }
+
+    return result
+
+
+def main():
+    try:
+        model = build_model(SPEC)
+        solver_name, solver_result = solve_model(model, SPEC)
+        result = extract_results(model, SPEC, solver_name, solver_result)
+
+        print("RESULT_JSON_START")
+        print(json.dumps(result, indent=2, sort_keys=True))
+        print("RESULT_JSON_END")
+
+    except Exception as exc:
+        error_result = {
+            "problem_type": SPEC.get("problem_type", "unknown"),
+            "mode": SPEC.get("mode", "unknown"),
+            "backend": "pyomo",
+            "solver_status": "error",
+            "termination_condition": "failed",
+            "error": str(exc),
+            "traceback": traceback.format_exc()
+        }
+
+        print("RESULT_JSON_START")
+        print(json.dumps(error_result, indent=2, sort_keys=True))
+        print("RESULT_JSON_END")
+        raise
+
+
+if __name__ == "__main__":
+    main()

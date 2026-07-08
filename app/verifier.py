@@ -257,6 +257,12 @@ def _check_energy_balance(result: dict, tolerance: float) -> dict:
             success_message = "General blend product mass balance is satisfied."
             failure_label = "General blend mass balance"
 
+        elif problem_type == "utility_emissions_optimization":
+            residual = float(result["heat_demand_kwh"]) - float(result["total_heat_kwh"])
+            check_name = "optimization_heat_balance"
+            success_message = "Utility heat demand balance is satisfied."
+            failure_label = "Utility heat balance"
+
         else:
             return make_check(
                 "balance",
@@ -306,6 +312,68 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
                 "Reported mass residual is within tolerance."
                 if passed
                 else f"Reported mass residual {residual} exceeds tolerance {tolerance}."
+            )
+        )
+
+    if problem_type == "utility_emissions_optimization":
+        failures = []
+
+        reported_heat_residual = result.get("heat_balance_residual_kwh")
+
+        if reported_heat_residual is None:
+            failures.append("Missing heat_balance_residual_kwh.")
+        elif abs(float(reported_heat_residual)) > tolerance:
+            failures.append(
+                f"Reported heat residual {reported_heat_residual} exceeds tolerance {tolerance}."
+            )
+
+        try:
+            expected_cost = sum(
+                float(utility["cost_per_kwh"]) * float(utility["heat_kwh"])
+                for utility in result["utility_results"]
+            )
+            cost_residual = float(result["total_cost"]) - expected_cost
+            if abs(cost_residual) > tolerance:
+                failures.append(
+                    f"Total cost residual {cost_residual} exceeds tolerance {tolerance}."
+                )
+        except KeyError as exc:
+            failures.append(f"Missing field for utility cost check: {exc}")
+
+        try:
+            expected_emissions = sum(
+                float(utility["emissions_kg_co2_per_kwh"]) * float(utility["heat_kwh"])
+                for utility in result["utility_results"]
+            )
+            emissions_residual = float(result["total_emissions_kg_co2"]) - expected_emissions
+            if abs(emissions_residual) > tolerance:
+                failures.append(
+                    f"Total emissions residual {emissions_residual} exceeds tolerance {tolerance}."
+                )
+
+            violation = float(result["total_emissions_kg_co2"]) - float(result["emissions_cap_kg_co2"])
+            if violation > tolerance:
+                failures.append(
+                    f"Emissions violation {violation} exceeds tolerance {tolerance}."
+                )
+
+            reported_violation = float(result.get("emissions_violation_kg_co2", 0.0))
+            if reported_violation > tolerance:
+                failures.append(
+                    f"Reported emissions violation {reported_violation} exceeds tolerance {tolerance}."
+                )
+        except KeyError as exc:
+            failures.append(f"Missing field for utility emissions check: {exc}")
+
+        passed = len(failures) == 0
+
+        return make_check(
+            "optimization_result_consistency",
+            passed,
+            (
+                "Utility optimization result satisfies heat, cost, and emissions checks."
+                if passed
+                else "; ".join(failures)
             )
         )
 
@@ -446,6 +514,13 @@ def _check_thermal_direction(result: dict) -> dict:
             "thermal_direction",
             True,
             "Thermal direction check skipped for general blend cost optimization."
+        )
+
+    if problem_type == "utility_emissions_optimization":
+        return make_check(
+            "thermal_direction",
+            True,
+            "Thermal direction check skipped for utility emissions optimization."
         )
 
     if problem_type == "adiabatic_mixer":
