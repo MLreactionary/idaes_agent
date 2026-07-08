@@ -29,6 +29,12 @@ def main():
     )
 
     parser.add_argument(
+        "--backend",
+        choices=["pyomo", "idaes"],
+        default=None
+    )
+
+    parser.add_argument(
         "--repair",
         action="store_true"
     )
@@ -67,7 +73,8 @@ def main():
         explain=args.explain,
         repair=args.repair,
         inject_bug=False,
-        max_repair_attempts=1
+        max_repair_attempts=1,
+        backend=args.backend
     )
 
     print(json.dumps(result, indent=2, sort_keys=True))

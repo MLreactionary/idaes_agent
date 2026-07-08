@@ -90,6 +90,10 @@
     },
     "heater_energy_balance": {
       "backend": "pyomo",
+      "backend_scaffolds": {
+        "idaes": "scaffolds/heater_energy_balance_idaes.py.template",
+        "pyomo": "scaffolds/heater_energy_balance.py.template"
+      },
       "defaults": {
         "cp_j_kg_k": 4184.0,
         "flow_basis": "mass",

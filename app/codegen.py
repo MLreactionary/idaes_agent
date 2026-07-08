@@ -11,7 +11,7 @@ class CodegenError(Exception):
     pass
 
 
-def render_model_code(spec: dict) -> str:
+def render_model_code(spec: dict, backend_override: str | None = None) -> str:
     """
     Render generated_model.py from a validated structured spec.
 
@@ -21,7 +21,19 @@ def render_model_code(spec: dict) -> str:
     validated_spec = validate_spec(spec)
 
     problem_config = get_problem_type(validated_spec["problem_type"])
-    scaffold_rel_path = problem_config["scaffold"]
+
+    if backend_override is not None:
+        backend_scaffolds = problem_config.get("backend_scaffolds", {})
+        if backend_override not in backend_scaffolds:
+            raise CodegenError(
+                f"Backend override {backend_override!r} is not available for "
+                f"problem_type={validated_spec['problem_type']}"
+            )
+        scaffold_rel_path = backend_scaffolds[backend_override]
+        validated_spec["backend"] = backend_override
+    else:
+        scaffold_rel_path = problem_config["scaffold"]
+        validated_spec["backend"] = problem_config.get("backend", "pyomo")
     scaffold_path = PROJECT_ROOT / scaffold_rel_path
 
     if not scaffold_path.exists():
@@ -39,13 +51,30 @@ def render_model_code(spec: dict) -> str:
     return rendered
 
 
-def write_generated_model(spec: dict, run_dir: Path) -> Path:
+def write_generated_model(
+    spec: dict,
+    run_dir: Path,
+    backend_override: str | None = None
+) -> Path:
     """
     Validate spec, render scaffold, and write generated_model.py.
     """
     run_dir.mkdir(parents=True, exist_ok=True)
 
     validated_spec = validate_spec(spec)
+
+    problem_config = get_problem_type(validated_spec["problem_type"])
+
+    if backend_override is not None:
+        backend_scaffolds = problem_config.get("backend_scaffolds", {})
+        if backend_override not in backend_scaffolds:
+            raise CodegenError(
+                f"Backend override {backend_override!r} is not available for "
+                f"problem_type={validated_spec['problem_type']}"
+            )
+        validated_spec["backend"] = backend_override
+    else:
+        validated_spec["backend"] = problem_config.get("backend", "pyomo")
 
     spec_path = run_dir / "structured_spec.json"
     model_path = run_dir / "generated_model.py"
@@ -55,7 +84,10 @@ def write_generated_model(spec: dict, run_dir: Path) -> Path:
         encoding="utf-8"
     )
 
-    rendered_code = render_model_code(validated_spec)
+    rendered_code = render_model_code(
+        validated_spec,
+        backend_override=backend_override
+    )
     model_path.write_text(rendered_code, encoding="utf-8")
 
     return model_path
