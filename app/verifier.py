@@ -198,6 +198,30 @@ def _splitter_mass_residual(result: dict) -> float:
     )
 
 
+def _blend_mass_residual(result: dict) -> float:
+    return (
+        float(result["product_mass_kg"])
+        - float(result["source1_mass_kg"])
+        - float(result["source2_mass_kg"])
+    )
+
+
+def _blend_cost_residual(result: dict) -> float:
+    expected_cost = (
+        float(result["source1_cost_per_kg"]) * float(result["source1_mass_kg"])
+        + float(result["source2_cost_per_kg"]) * float(result["source2_mass_kg"])
+    )
+
+    return float(result["total_cost"]) - expected_cost
+
+
+def _blend_impurity_violation(result: dict) -> float:
+    return (
+        float(result["final_impurity_fraction"])
+        - float(result["impurity_limit_fraction"])
+    )
+
+
 
 def _check_energy_balance(result: dict, tolerance: float) -> dict:
     problem_type = result.get("problem_type")
@@ -208,22 +232,32 @@ def _check_energy_balance(result: dict, tolerance: float) -> dict:
             check_name = "energy_balance"
             success_message = "Energy balance is satisfied."
             failure_label = "Energy balance"
+
         elif problem_type == "adiabatic_mixer":
             residual = _mixer_energy_residual(result)
             check_name = "energy_balance"
             success_message = "Energy balance is satisfied."
             failure_label = "Energy balance"
+
         elif problem_type == "splitter_mass_balance":
             residual = _splitter_mass_residual(result)
             check_name = "mass_balance"
             success_message = "Mass balance is satisfied."
             failure_label = "Mass balance"
+
+        elif problem_type == "blend_cost_optimization":
+            residual = _blend_mass_residual(result)
+            check_name = "optimization_mass_balance"
+            success_message = "Optimization product mass balance is satisfied."
+            failure_label = "Optimization mass balance"
+
         else:
             return make_check(
                 "balance",
                 False,
                 f"No balance verifier implemented for problem_type={problem_type}"
             )
+
     except KeyError as exc:
         return make_check(
             "balance",
@@ -269,6 +303,48 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
             )
         )
 
+    if problem_type == "blend_cost_optimization":
+        failures = []
+
+        reported_mass_residual = result.get("mass_balance_residual_kg")
+
+        if reported_mass_residual is None:
+            failures.append("Missing mass_balance_residual_kg.")
+        elif abs(float(reported_mass_residual)) > tolerance:
+            failures.append(
+                f"Reported mass residual {reported_mass_residual} exceeds tolerance {tolerance}."
+            )
+
+        try:
+            cost_residual = _blend_cost_residual(result)
+            if abs(cost_residual) > tolerance:
+                failures.append(
+                    f"Total cost residual {cost_residual} exceeds tolerance {tolerance}."
+                )
+        except KeyError as exc:
+            failures.append(f"Missing field for cost check: {exc}")
+
+        try:
+            impurity_violation = _blend_impurity_violation(result)
+            if impurity_violation > tolerance:
+                failures.append(
+                    f"Impurity violation {impurity_violation} exceeds tolerance {tolerance}."
+                )
+        except KeyError as exc:
+            failures.append(f"Missing field for impurity check: {exc}")
+
+        passed = len(failures) == 0
+
+        return make_check(
+            "optimization_result_consistency",
+            passed,
+            (
+                "Optimization result satisfies mass, cost, and impurity checks."
+                if passed
+                else "; ".join(failures)
+            )
+        )
+
     residual = result.get("energy_balance_residual_w")
 
     if residual is None:
@@ -293,6 +369,13 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
 
 def _check_thermal_direction(result: dict) -> dict:
     problem_type = result.get("problem_type")
+
+    if problem_type == "blend_cost_optimization":
+        return make_check(
+            "thermal_direction",
+            True,
+            "Thermal direction check skipped for blend cost optimization."
+        )
 
     if problem_type == "adiabatic_mixer":
         return make_check(

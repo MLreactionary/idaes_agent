@@ -88,5 +88,29 @@
     "id": "adiabatic_mixer_rich_units_celsius_kg_hr",
     "prompt": "Blend 3600 kg/hr of water at 25 C with 0.5 kg/s of water at 75 C. What is the outlet temperature?",
     "tolerance_abs": 1e-06
+  },
+  {
+    "expected_mode": "minimize_cost",
+    "expected_problem_type": "blend_cost_optimization",
+    "id": "blend_cost_optimization_two_sources",
+    "numeric_expectations": [
+      {
+        "expected": 50.0,
+        "field": "source1_mass_kg"
+      },
+      {
+        "expected": 50.0,
+        "field": "source2_mass_kg"
+      },
+      {
+        "expected": 150.0,
+        "field": "total_cost"
+      },
+      {
+        "expected": 0.03,
+        "field": "final_impurity_fraction"
+      }
+    ],
+    "prompt": "Optimize a blend of 100 kg product using source A cost 2 $/kg impurity 1% and source B cost 1 $/kg impurity 5%, with final impurity limit 3%. What is the minimum cost blend?"
   }
 ]
