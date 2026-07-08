@@ -296,6 +296,34 @@ def main():
                 }
             ]
         },
+        {
+            "id": "general_blend_cost_optimization",
+            "prompt": (
+                "Optimize a blend of 100 kg product using source A cost 2 $/kg sulfur 1% ash 2%, "
+                "source B cost 1 $/kg sulfur 5% ash 1%, and source C cost 1.5 $/kg sulfur 2% ash 3%. "
+                "Final sulfur must be at most 3% and ash must be at most 2%. Minimize cost."
+            ),
+            "expected_problem_type": "general_blend_cost_optimization",
+            "expected_mode": "minimize_cost",
+            "numeric_expectations": [
+                {
+                    "field": "number_of_sources",
+                    "expected": 3
+                },
+                {
+                    "field": "total_mass_kg",
+                    "expected": 100.0
+                },
+                {
+                    "field": "total_cost",
+                    "expected": 140.0
+                },
+                {
+                    "field": "maximum_quality_violation_fraction",
+                    "expected": 0.0
+                }
+            ]
+        },
     ]
 
     case_results = []

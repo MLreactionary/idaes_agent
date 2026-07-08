@@ -1,0 +1,195 @@
+"""
+Generated general blend cost optimization model.
+
+Minimize feedstock cost while meeting product mass and multiple quality limits.
+"""
+
+import json
+import traceback
+
+import pyomo.environ as pyo
+
+
+SPEC = {{SPEC_JSON}}
+
+
+def build_model(spec):
+    model = pyo.ConcreteModel(name="general_blend_cost_optimization")
+
+    if spec["mode"] != "minimize_cost":
+        raise ValueError(f"Unsupported mode: {spec['mode']}")
+
+    source_names = [source["name"] for source in spec["sources"]]
+    quality_names = sorted(spec["quality_limits"].keys())
+
+    model.SOURCES = pyo.Set(initialize=source_names)
+    model.QUALITIES = pyo.Set(initialize=quality_names)
+
+    model.mass_kg = pyo.Var(model.SOURCES, domain=pyo.NonNegativeReals)
+
+    product_mass_kg = float(spec["product_mass_kg"])
+
+    cost_by_source = {
+        source["name"]: float(source["cost_per_kg"])
+        for source in spec["sources"]
+    }
+
+    quality_by_source = {
+        source["name"]: {
+            quality_name: float(source["qualities"][quality_name])
+            for quality_name in quality_names
+        }
+        for source in spec["sources"]
+    }
+
+    quality_limits = {
+        quality_name: float(limit)
+        for quality_name, limit in spec["quality_limits"].items()
+    }
+
+    def objective_rule(m):
+        return sum(cost_by_source[source] * m.mass_kg[source] for source in m.SOURCES)
+
+    model.total_cost_objective = pyo.Objective(rule=objective_rule, sense=pyo.minimize)
+
+    def product_mass_rule(m):
+        return sum(m.mass_kg[source] for source in m.SOURCES) == product_mass_kg
+
+    model.product_mass_constraint = pyo.Constraint(rule=product_mass_rule)
+
+    def quality_rule(m, quality_name):
+        return (
+            sum(
+                quality_by_source[source][quality_name] * m.mass_kg[source]
+                for source in m.SOURCES
+            )
+            <= quality_limits[quality_name] * product_mass_kg
+        )
+
+    model.quality_constraints = pyo.Constraint(model.QUALITIES, rule=quality_rule)
+
+    return model
+
+
+def solve_model(model, spec):
+    solver_name = spec.get("optimization_solver", "glpk")
+    solver = pyo.SolverFactory(solver_name)
+
+    if not solver.available(False):
+        raise RuntimeError(f"Required optimization solver is not available: {solver_name}")
+
+    result = solver.solve(model)
+    return solver_name, result
+
+
+def extract_results(model, spec, solver_name, solver_result):
+    product_mass_kg = float(spec["product_mass_kg"])
+    quality_names = sorted(spec["quality_limits"].keys())
+
+    source_results = []
+
+    for source in spec["sources"]:
+        name = source["name"]
+        mass_kg = pyo.value(model.mass_kg[name])
+
+        source_results.append(
+            {
+                "name": name,
+                "mass_kg": mass_kg,
+                "cost_per_kg": float(source["cost_per_kg"]),
+                "qualities": {
+                    quality_name: float(source["qualities"][quality_name])
+                    for quality_name in quality_names
+                }
+            }
+        )
+
+    total_mass_kg = sum(source["mass_kg"] for source in source_results)
+
+    total_cost = sum(
+        source["cost_per_kg"] * source["mass_kg"]
+        for source in source_results
+    )
+
+    quality_results = {}
+
+    for quality_name in quality_names:
+        quality_results[quality_name] = (
+            sum(
+                source["qualities"][quality_name] * source["mass_kg"]
+                for source in source_results
+            )
+            / product_mass_kg
+        )
+
+    quality_limits = {
+        quality_name: float(spec["quality_limits"][quality_name])
+        for quality_name in quality_names
+    }
+
+    quality_slacks = {
+        quality_name: quality_limits[quality_name] - quality_results[quality_name]
+        for quality_name in quality_names
+    }
+
+    maximum_quality_violation_fraction = max(
+        [quality_results[q] - quality_limits[q] for q in quality_names] + [0.0]
+    )
+
+    result = {
+        "problem_type": spec["problem_type"],
+        "mode": spec["mode"],
+        "backend": "pyomo",
+        "solver_name": solver_name,
+        "optimization_solver": solver_name,
+        "solver_status": "ok",
+        "termination_condition": str(solver_result.solver.termination_condition),
+
+        "flow_basis": spec.get("flow_basis", "mass"),
+        "product_mass_kg": product_mass_kg,
+        "total_mass_kg": total_mass_kg,
+        "mass_balance_residual_kg": product_mass_kg - total_mass_kg,
+
+        "number_of_sources": len(source_results),
+        "source_results": source_results,
+
+        "quality_limits": quality_limits,
+        "quality_results": quality_results,
+        "quality_slacks": quality_slacks,
+        "maximum_quality_violation_fraction": maximum_quality_violation_fraction,
+
+        "total_cost": total_cost
+    }
+
+    return result
+
+
+def main():
+    try:
+        model = build_model(SPEC)
+        solver_name, solver_result = solve_model(model, SPEC)
+        result = extract_results(model, SPEC, solver_name, solver_result)
+
+        print("RESULT_JSON_START")
+        print(json.dumps(result, indent=2, sort_keys=True))
+        print("RESULT_JSON_END")
+
+    except Exception as exc:
+        error_result = {
+            "problem_type": SPEC.get("problem_type", "unknown"),
+            "mode": SPEC.get("mode", "unknown"),
+            "backend": "pyomo",
+            "solver_status": "error",
+            "termination_condition": "failed",
+            "error": str(exc),
+            "traceback": traceback.format_exc()
+        }
+
+        print("RESULT_JSON_START")
+        print(json.dumps(error_result, indent=2, sort_keys=True))
+        print("RESULT_JSON_END")
+        raise
+
+
+if __name__ == "__main__":
+    main()
