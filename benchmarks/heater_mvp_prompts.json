@@ -112,5 +112,29 @@
       }
     ],
     "prompt": "Optimize a blend of 100 kg product using source A cost 2 $/kg impurity 1% and source B cost 1 $/kg impurity 5%, with final impurity limit 3%. What is the minimum cost blend?"
+  },
+  {
+    "expected_mode": "minimize_cost",
+    "expected_problem_type": "general_blend_cost_optimization",
+    "id": "general_blend_cost_optimization_three_sources",
+    "numeric_expectations": [
+      {
+        "expected": 3,
+        "field": "number_of_sources"
+      },
+      {
+        "expected": 100.0,
+        "field": "total_mass_kg"
+      },
+      {
+        "expected": 140.0,
+        "field": "total_cost"
+      },
+      {
+        "expected": 0.0,
+        "field": "maximum_quality_violation_fraction"
+      }
+    ],
+    "prompt": "Optimize a blend of 100 kg product using source A cost 2 $/kg sulfur 1% ash 2%, source B cost 1 $/kg sulfur 5% ash 1%, and source C cost 1.5 $/kg sulfur 2% ash 3%. Final sulfur must be at most 3% and ash must be at most 2%. Minimize cost."
   }
 ]

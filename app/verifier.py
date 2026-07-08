@@ -251,6 +251,12 @@ def _check_energy_balance(result: dict, tolerance: float) -> dict:
             success_message = "Optimization product mass balance is satisfied."
             failure_label = "Optimization mass balance"
 
+        elif problem_type == "general_blend_cost_optimization":
+            residual = float(result["product_mass_kg"]) - float(result["total_mass_kg"])
+            check_name = "optimization_mass_balance"
+            success_message = "General blend product mass balance is satisfied."
+            failure_label = "General blend mass balance"
+
         else:
             return make_check(
                 "balance",
@@ -300,6 +306,64 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
                 "Reported mass residual is within tolerance."
                 if passed
                 else f"Reported mass residual {residual} exceeds tolerance {tolerance}."
+            )
+        )
+
+    if problem_type == "general_blend_cost_optimization":
+        failures = []
+
+        reported_mass_residual = result.get("mass_balance_residual_kg")
+
+        if reported_mass_residual is None:
+            failures.append("Missing mass_balance_residual_kg.")
+        elif abs(float(reported_mass_residual)) > tolerance:
+            failures.append(
+                f"Reported mass residual {reported_mass_residual} exceeds tolerance {tolerance}."
+            )
+
+        try:
+            expected_cost = sum(
+                float(source["cost_per_kg"]) * float(source["mass_kg"])
+                for source in result["source_results"]
+            )
+            cost_residual = float(result["total_cost"]) - expected_cost
+            if abs(cost_residual) > tolerance:
+                failures.append(
+                    f"Total cost residual {cost_residual} exceeds tolerance {tolerance}."
+                )
+        except KeyError as exc:
+            failures.append(f"Missing field for general blend cost check: {exc}")
+
+        try:
+            limits = result["quality_limits"]
+            quality_results = result["quality_results"]
+
+            for quality_name, limit in limits.items():
+                value = float(quality_results[quality_name])
+                violation = value - float(limit)
+
+                if violation > tolerance:
+                    failures.append(
+                        f"Quality {quality_name} violation {violation} exceeds tolerance {tolerance}."
+                    )
+
+            max_violation = float(result.get("maximum_quality_violation_fraction", 0.0))
+            if max_violation > tolerance:
+                failures.append(
+                    f"Maximum quality violation {max_violation} exceeds tolerance {tolerance}."
+                )
+        except KeyError as exc:
+            failures.append(f"Missing field for general blend quality check: {exc}")
+
+        passed = len(failures) == 0
+
+        return make_check(
+            "optimization_result_consistency",
+            passed,
+            (
+                "General blend optimization result satisfies mass, cost, and quality checks."
+                if passed
+                else "; ".join(failures)
             )
         )
 
@@ -375,6 +439,13 @@ def _check_thermal_direction(result: dict) -> dict:
             "thermal_direction",
             True,
             "Thermal direction check skipped for blend cost optimization."
+        )
+
+    if problem_type == "general_blend_cost_optimization":
+        return make_check(
+            "thermal_direction",
+            True,
+            "Thermal direction check skipped for general blend cost optimization."
         )
 
     if problem_type == "adiabatic_mixer":

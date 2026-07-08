@@ -182,6 +182,77 @@
         ]
       }
     },
+    "general_blend_cost_optimization": {
+      "backend": "pyomo",
+      "defaults": {
+        "flow_basis": "mass",
+        "optimization_solver": "glpk"
+      },
+      "field_ranges": {
+        "mass_balance_residual_kg": {
+          "max": 1e-06,
+          "min": -1e-06
+        },
+        "maximum_quality_violation_fraction": {
+          "max": 1e-06,
+          "min": 0.0
+        },
+        "number_of_sources": {
+          "max": 1000.0,
+          "min": 2.0
+        },
+        "product_mass_kg": {
+          "max": 1000000000.0,
+          "min": 0.0
+        },
+        "total_cost": {
+          "max": 1000000000000.0,
+          "min": 0.0
+        },
+        "total_mass_kg": {
+          "max": 1000000000.0,
+          "min": 0.0
+        }
+      },
+      "required_fields_by_mode": {
+        "minimize_cost": [
+          "mode",
+          "product_mass_kg",
+          "sources",
+          "quality_limits"
+        ]
+      },
+      "scaffold": "scaffolds/general_blend_cost_optimization.py.template",
+      "supported_modes": [
+        "minimize_cost"
+      ],
+      "verifier": {
+        "allowed_solver_statuses": [
+          "ok"
+        ],
+        "allowed_termination_conditions": [
+          "optimal"
+        ],
+        "energy_balance_tolerance_w": 1e-06,
+        "mass_balance_tolerance_kg_s": 1e-06,
+        "required_result_fields": [
+          "problem_type",
+          "mode",
+          "solver_status",
+          "termination_condition",
+          "optimization_solver",
+          "product_mass_kg",
+          "total_mass_kg",
+          "mass_balance_residual_kg",
+          "number_of_sources",
+          "source_results",
+          "quality_limits",
+          "quality_results",
+          "maximum_quality_violation_fraction",
+          "total_cost"
+        ]
+      }
+    },
     "heater_energy_balance": {
       "backend": "pyomo",
       "backend_scaffolds": {
