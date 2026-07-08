@@ -22,6 +22,20 @@ def close_enough(actual, expected, tolerance_abs):
     return abs(float(actual) - float(expected)) <= float(tolerance_abs)
 
 
+def get_result_value(parsed: dict, field: str):
+    if "." not in field:
+        return parsed.get(field)
+
+    current = parsed
+
+    for part in field.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+
+    return current
+
+
 def evaluate_success_case(case: dict, run_result: dict) -> tuple[bool, list[str]]:
     messages = []
 
@@ -36,6 +50,14 @@ def evaluate_success_case(case: dict, run_result: dict) -> tuple[bool, list[str]
     if not run_result.get("verified"):
         messages.append("Run was not verified.")
 
+    expected_problem_type = case.get("expected_problem_type")
+    if expected_problem_type is not None:
+        actual_problem_type = parsed.get("problem_type")
+        if actual_problem_type != expected_problem_type:
+            messages.append(
+                f"Expected problem_type {expected_problem_type}, got {actual_problem_type}."
+            )
+
     expected_mode = case.get("expected_mode")
     if expected_mode is not None:
         actual_mode = parsed.get("mode")
@@ -44,13 +66,13 @@ def evaluate_success_case(case: dict, run_result: dict) -> tuple[bool, list[str]
 
     tolerance_abs = case.get("tolerance_abs", 1e-6)
 
-    numeric_expectations = [
+    legacy_numeric_expectations = [
         ("expected_heat_duty_w", "heat_duty_w"),
         ("expected_temperature_out_k", "temperature_out_k"),
         ("expected_mass_flow_kg_s", "mass_flow_kg_s"),
     ]
 
-    for expected_key, result_key in numeric_expectations:
+    for expected_key, result_key in legacy_numeric_expectations:
         if expected_key not in case:
             continue
 
@@ -64,6 +86,21 @@ def evaluate_success_case(case: dict, run_result: dict) -> tuple[bool, list[str]
         if not close_enough(actual, expected, tolerance_abs):
             messages.append(
                 f"Expected {result_key}={expected}, got {actual}, tolerance={tolerance_abs}."
+            )
+
+    for expectation in case.get("numeric_expectations", []):
+        field = expectation["field"]
+        expected = expectation["expected"]
+        expectation_tolerance = expectation.get("tolerance_abs", tolerance_abs)
+        actual = get_result_value(parsed, field)
+
+        if actual is None:
+            messages.append(f"Missing result field {field}.")
+            continue
+
+        if not close_enough(actual, expected, expectation_tolerance):
+            messages.append(
+                f"Expected {field}={expected}, got {actual}, tolerance={expectation_tolerance}."
             )
 
     return len(messages) == 0, messages
