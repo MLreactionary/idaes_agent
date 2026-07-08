@@ -216,6 +216,86 @@ def write_demo_reports(demo_result: dict):
     return json_path, md_path
 
 
+def run_utility_repair_case() -> dict:
+    print("")
+    print("=" * 100)
+    print("DEMO CASE: utility_optimization_repair_smoke")
+    print("=" * 100)
+
+    prompt = (
+        "A process needs 500 kW of heat for 1 hr. "
+        "Steam cost 0.04 $/kWh emissions 0.2 kg CO2/kWh, "
+        "and electric heat cost 0.08 $/kWh emissions 0.05 kg CO2/kWh. "
+        "Emissions must be at most 60 kg CO2/hr. Minimize cost."
+    )
+    print(prompt)
+
+    result = run_problem(
+        prompt=prompt,
+        planner="llm",
+        explain=False,
+        repair=True,
+        inject_bug=True,
+        inject_bug_type="utility_wrong_emissions_key",
+        max_repair_attempts=1
+    )
+
+    run_dir = Path(result["run_dir"])
+    parsed = load_json(run_dir / "parsed_result.json")
+    trace = load_json(run_dir / "repair_attempt_1_trace.json")
+    report_text = (run_dir / "report.md").read_text(encoding="utf-8")
+
+    checks = [
+        {
+            "name": "verified",
+            "passed": result.get("verified") is True,
+            "message": f"verified={result.get('verified')}"
+        },
+        {
+            "name": "repair_attempts_used",
+            "passed": result.get("repair_attempts_used") == 1,
+            "message": f"repair_attempts_used={result.get('repair_attempts_used')}"
+        },
+        {
+            "name": "patch_strategy",
+            "passed": trace.get("patch_strategy") == "minimal_utility_emissions_key_patch_deterministic",
+            "message": f"patch_strategy={trace.get('patch_strategy')}"
+        },
+        {
+            "name": "problem_type",
+            "passed": parsed.get("problem_type") == "utility_emissions_optimization",
+            "message": f"problem_type={parsed.get('problem_type')}"
+        },
+        {
+            "name": "total_cost",
+            "passed": close_enough(parsed.get("total_cost"), 30.6666666666667),
+            "message": f"total_cost={parsed.get('total_cost')}"
+        },
+        {
+            "name": "report_has_repair_history",
+            "passed": "## Repair History" in report_text,
+            "message": "repair history present" if "## Repair History" in report_text else "repair history missing"
+        }
+    ]
+
+    passed = all(check["passed"] for check in checks)
+
+    summary = {
+        "id": "utility_optimization_repair_smoke",
+        "passed": passed,
+        "run_id": result["run_id"],
+        "run_dir": result["run_dir"],
+        "report_path": result["report_path"],
+        "checks": checks
+    }
+
+    print("")
+    print("CASE RESULT")
+    print(json.dumps(summary, indent=2, sort_keys=True))
+
+    return summary
+
+
 def main():
     demo_id = "demo_" + datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -365,6 +445,7 @@ def main():
         case_results.append(run_standard_case(case))
 
     case_results.append(run_repair_case())
+    case_results.append(run_utility_repair_case())
 
     passed_cases = sum(1 for case in case_results if case["passed"])
     total_cases = len(case_results)

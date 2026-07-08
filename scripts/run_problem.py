@@ -100,6 +100,11 @@ def inject_controlled_bug(model_path: Path, run_dir: Path, bug_type: str = "bad_
         replacement = 'spec["outlet1_split_fraction_WRONG"]'
         description = "Changed splitter structured-spec key to force a family-specific execution failure."
 
+    elif bug_type == "utility_wrong_emissions_key":
+        target = 'spec["emissions_cap_kg_co2"]'
+        replacement = 'spec["emissions_cap_WRONG_kg_co2"]'
+        description = "Changed utility emissions-cap structured-spec key to force an optimization execution failure."
+
     else:
         raise RuntimeError(f"Unknown controlled bug type: {bug_type}")
 
@@ -408,7 +413,7 @@ def main():
     )
     parser.add_argument(
         "--inject-bug-type",
-        choices=["bad_import", "splitter_wrong_split_key"],
+        choices=["bad_import", "splitter_wrong_split_key", "utility_wrong_emissions_key"],
         default="bad_import",
         help="Controlled bug type to inject when --inject-bug is used."
     )

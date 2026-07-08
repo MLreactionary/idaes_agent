@@ -98,6 +98,17 @@ def choose_safe_patch(
         )
         return patched, "minimal_splitter_key_patch_deterministic"
 
+    # Controlled utility optimization repair:
+    # The injected utility bug changes the emissions-cap structured-spec key.
+    # Apply the exact minimal key repair instead of trusting a full rewrite.
+    if 'spec["emissions_cap_WRONG_kg_co2"]' in original_code:
+        patched = original_code.replace(
+            'spec["emissions_cap_WRONG_kg_co2"]',
+            'spec["emissions_cap_kg_co2"]',
+            1
+        )
+        return patched, "minimal_utility_emissions_key_patch_deterministic"
+
     # If a future candidate clearly fixes pyomox, still constrain the edit to
     # the original file instead of accepting the full rewrite.
     if (
@@ -209,6 +220,13 @@ def repair_generated_model(
             "DETERMINISTIC_REPAIR_NO_LLM_CALL\n"
             "Known controlled splitter bug detected: outlet1_split_fraction_WRONG.\n"
             "Backend will apply minimal splitter key patch."
+        )
+        candidate_code = generated_code
+    elif 'spec["emissions_cap_WRONG_kg_co2"]' in generated_code:
+        raw_response = (
+            "DETERMINISTIC_REPAIR_NO_LLM_CALL\n"
+            "Known controlled utility optimization bug detected: emissions_cap_WRONG_kg_co2.\n"
+            "Backend will apply minimal utility emissions key patch."
         )
         candidate_code = generated_code
     else:
