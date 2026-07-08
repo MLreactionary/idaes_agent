@@ -1,0 +1,176 @@
+"""
+Generated blend cost optimization model.
+
+MVP model:
+    Minimize feedstock cost while meeting product mass and impurity constraint.
+
+Decision variables:
+    source1_mass_kg
+    source2_mass_kg
+
+Objective:
+    minimize source1_cost * source1_mass + source2_cost * source2_mass
+
+Constraints:
+    source1_mass + source2_mass = product_mass
+    source1_impurity * source1_mass + source2_impurity * source2_mass <= impurity_limit * product_mass
+"""
+
+import json
+import traceback
+
+import pyomo.environ as pyo
+
+
+SPEC = {{SPEC_JSON}}
+
+
+def build_model(spec):
+    model = pyo.ConcreteModel(name="blend_cost_optimization")
+
+    if spec["mode"] != "minimize_cost":
+        raise ValueError(f"Unsupported mode: {spec['mode']}")
+
+    model.source1_mass_kg = pyo.Var(domain=pyo.NonNegativeReals)
+    model.source2_mass_kg = pyo.Var(domain=pyo.NonNegativeReals)
+
+    product_mass_kg = float(spec["product_mass_kg"])
+    source1_cost_per_kg = float(spec["source1_cost_per_kg"])
+    source2_cost_per_kg = float(spec["source2_cost_per_kg"])
+    source1_impurity_fraction = float(spec["source1_impurity_fraction"])
+    source2_impurity_fraction = float(spec["source2_impurity_fraction"])
+    impurity_limit_fraction = float(spec["impurity_limit_fraction"])
+
+    def objective_rule(m):
+        return (
+            source1_cost_per_kg * m.source1_mass_kg
+            + source2_cost_per_kg * m.source2_mass_kg
+        )
+
+    model.total_cost_objective = pyo.Objective(
+        rule=objective_rule,
+        sense=pyo.minimize
+    )
+
+    def product_mass_rule(m):
+        return m.source1_mass_kg + m.source2_mass_kg == product_mass_kg
+
+    model.product_mass_constraint = pyo.Constraint(rule=product_mass_rule)
+
+    def impurity_rule(m):
+        return (
+            source1_impurity_fraction * m.source1_mass_kg
+            + source2_impurity_fraction * m.source2_mass_kg
+            <= impurity_limit_fraction * product_mass_kg
+        )
+
+    model.impurity_constraint = pyo.Constraint(rule=impurity_rule)
+
+    return model
+
+
+def solve_model(model, spec):
+    solver_name = spec.get("optimization_solver", "glpk")
+    solver = pyo.SolverFactory(solver_name)
+
+    if not solver.available(False):
+        raise RuntimeError(f"Required optimization solver is not available: {solver_name}")
+
+    result = solver.solve(model)
+
+    return solver_name, result
+
+
+def extract_results(model, spec, solver_name, solver_result):
+    product_mass_kg = float(spec["product_mass_kg"])
+    source1_cost_per_kg = float(spec["source1_cost_per_kg"])
+    source2_cost_per_kg = float(spec["source2_cost_per_kg"])
+    source1_impurity_fraction = float(spec["source1_impurity_fraction"])
+    source2_impurity_fraction = float(spec["source2_impurity_fraction"])
+    impurity_limit_fraction = float(spec["impurity_limit_fraction"])
+
+    source1_mass_kg = pyo.value(model.source1_mass_kg)
+    source2_mass_kg = pyo.value(model.source2_mass_kg)
+
+    total_cost = (
+        source1_cost_per_kg * source1_mass_kg
+        + source2_cost_per_kg * source2_mass_kg
+    )
+
+    final_impurity_fraction = (
+        source1_impurity_fraction * source1_mass_kg
+        + source2_impurity_fraction * source2_mass_kg
+    ) / product_mass_kg
+
+    mass_balance_residual_kg = (
+        product_mass_kg
+        - source1_mass_kg
+        - source2_mass_kg
+    )
+
+    impurity_constraint_slack_fraction = (
+        impurity_limit_fraction
+        - final_impurity_fraction
+    )
+
+    result = {
+        "problem_type": spec["problem_type"],
+        "mode": spec["mode"],
+        "backend": "pyomo",
+        "solver_name": solver_name,
+        "optimization_solver": solver_name,
+        "solver_status": "ok",
+        "termination_condition": str(solver_result.solver.termination_condition),
+
+        "flow_basis": spec.get("flow_basis", "mass"),
+        "product_mass_kg": product_mass_kg,
+
+        "source1_name": spec["source1_name"],
+        "source1_cost_per_kg": source1_cost_per_kg,
+        "source1_impurity_fraction": source1_impurity_fraction,
+        "source1_mass_kg": source1_mass_kg,
+
+        "source2_name": spec["source2_name"],
+        "source2_cost_per_kg": source2_cost_per_kg,
+        "source2_impurity_fraction": source2_impurity_fraction,
+        "source2_mass_kg": source2_mass_kg,
+
+        "total_cost": total_cost,
+        "final_impurity_fraction": final_impurity_fraction,
+        "impurity_limit_fraction": impurity_limit_fraction,
+        "impurity_constraint_slack_fraction": impurity_constraint_slack_fraction,
+        "mass_balance_residual_kg": mass_balance_residual_kg,
+    }
+
+    return result
+
+
+def main():
+    try:
+        model = build_model(SPEC)
+        solver_name, solver_result = solve_model(model, SPEC)
+        result = extract_results(model, SPEC, solver_name, solver_result)
+
+        print("RESULT_JSON_START")
+        print(json.dumps(result, indent=2, sort_keys=True))
+        print("RESULT_JSON_END")
+
+    except Exception as exc:
+        error_result = {
+            "problem_type": SPEC.get("problem_type", "unknown"),
+            "mode": SPEC.get("mode", "unknown"),
+            "backend": "pyomo",
+            "solver_status": "error",
+            "termination_condition": "failed",
+            "error": str(exc),
+            "traceback": traceback.format_exc()
+        }
+
+        print("RESULT_JSON_START")
+        print(json.dumps(error_result, indent=2, sort_keys=True))
+        print("RESULT_JSON_END")
+        raise
+
+
+if __name__ == "__main__":
+    main()

@@ -267,7 +267,35 @@ def main():
                     "expected": 340.0
                 }
             ]
-        }
+        },
+        {
+            "id": "blend_cost_optimization",
+            "prompt": (
+                "Optimize a blend of 100 kg product using source A cost 2 $/kg impurity 1% "
+                "and source B cost 1 $/kg impurity 5%, with final impurity limit 3%. "
+                "What is the minimum cost blend?"
+            ),
+            "expected_problem_type": "blend_cost_optimization",
+            "expected_mode": "minimize_cost",
+            "numeric_expectations": [
+                {
+                    "field": "source1_mass_kg",
+                    "expected": 50.0
+                },
+                {
+                    "field": "source2_mass_kg",
+                    "expected": 50.0
+                },
+                {
+                    "field": "total_cost",
+                    "expected": 150.0
+                },
+                {
+                    "field": "final_impurity_fraction",
+                    "expected": 0.03
+                }
+            ]
+        },
     ]
 
     case_results = []

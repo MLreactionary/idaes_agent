@@ -88,6 +88,100 @@
         "temperature_abs_tolerance_k": 1e-06
       }
     },
+    "blend_cost_optimization": {
+      "backend": "pyomo",
+      "defaults": {
+        "flow_basis": "mass",
+        "optimization_solver": "glpk"
+      },
+      "field_ranges": {
+        "final_impurity_fraction": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "impurity_limit_fraction": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "mass_balance_residual_kg": {
+          "max": 1e-06,
+          "min": -1e-06
+        },
+        "product_mass_kg": {
+          "max": 1000000000.0,
+          "min": 0.0
+        },
+        "source1_cost_per_kg": {
+          "max": 1000000000.0,
+          "min": 0.0
+        },
+        "source1_impurity_fraction": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "source1_mass_kg": {
+          "max": 1000000000.0,
+          "min": 0.0
+        },
+        "source2_cost_per_kg": {
+          "max": 1000000000.0,
+          "min": 0.0
+        },
+        "source2_impurity_fraction": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "source2_mass_kg": {
+          "max": 1000000000.0,
+          "min": 0.0
+        },
+        "total_cost": {
+          "max": 1000000000000.0,
+          "min": 0.0
+        }
+      },
+      "required_fields_by_mode": {
+        "minimize_cost": [
+          "mode",
+          "product_mass_kg",
+          "source1_name",
+          "source1_cost_per_kg",
+          "source1_impurity_fraction",
+          "source2_name",
+          "source2_cost_per_kg",
+          "source2_impurity_fraction",
+          "impurity_limit_fraction"
+        ]
+      },
+      "scaffold": "scaffolds/blend_cost_optimization.py.template",
+      "supported_modes": [
+        "minimize_cost"
+      ],
+      "verifier": {
+        "allowed_solver_statuses": [
+          "ok"
+        ],
+        "allowed_termination_conditions": [
+          "optimal"
+        ],
+        "energy_balance_tolerance_w": 1e-06,
+        "mass_balance_tolerance_kg_s": 1e-06,
+        "required_result_fields": [
+          "problem_type",
+          "mode",
+          "solver_status",
+          "termination_condition",
+          "optimization_solver",
+          "product_mass_kg",
+          "source1_mass_kg",
+          "source2_mass_kg",
+          "total_cost",
+          "final_impurity_fraction",
+          "impurity_limit_fraction",
+          "mass_balance_residual_kg"
+        ]
+      }
+    },
     "heater_energy_balance": {
       "backend": "pyomo",
       "backend_scaffolds": {

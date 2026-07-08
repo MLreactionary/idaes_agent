@@ -16,6 +16,7 @@ from app.planner import plan_problem as regex_plan_problem
 from app.llm_planner import plan_problem_with_llm
 from app.mixer_planner import is_mixer_prompt, plan_mixer_problem
 from app.splitter_planner import is_splitter_prompt, plan_splitter_problem
+from app.blend_optimizer_planner import is_blend_optimization_prompt, plan_blend_optimization_problem
 from app.codegen import write_generated_model
 from app.executor import execute_model
 from app.parser import parse_execution_result
@@ -34,6 +35,9 @@ def make_run_id() -> str:
 
 
 def choose_planner(prompt: str, planner: str, run_dir: Path) -> dict:
+    if is_blend_optimization_prompt(prompt):
+        return plan_blend_optimization_problem(prompt, trace_dir=run_dir)
+
     if is_splitter_prompt(prompt):
         return plan_splitter_problem(prompt, trace_dir=run_dir)
 
