@@ -173,7 +173,8 @@ def run_problem(
     repair: bool = False,
     inject_bug: bool = False,
     max_repair_attempts: int = 1,
-    inject_bug_type: str = "bad_import"
+    inject_bug_type: str = "bad_import",
+    backend: str | None = None
 ) -> dict:
     run_id = make_run_id()
     run_dir = PROJECT_ROOT / "outputs" / "runs" / run_id
@@ -190,7 +191,8 @@ def run_problem(
                 "repair": repair,
                 "inject_bug": inject_bug,
                 "max_repair_attempts": max_repair_attempts,
-                "inject_bug_type": inject_bug_type
+                "inject_bug_type": inject_bug_type,
+                "backend": backend
             },
             indent=2,
             sort_keys=True
@@ -208,7 +210,11 @@ def run_problem(
 
         spec = choose_planner(prompt, planner=planner, run_dir=run_dir)
 
-        model_path = write_generated_model(spec, run_dir)
+        model_path = write_generated_model(
+            spec,
+            run_dir,
+            backend_override=backend
+        )
 
         if inject_bug:
             inject_controlled_bug(
@@ -305,6 +311,7 @@ def run_problem(
             "repair": repair,
             "inject_bug": inject_bug,
             "inject_bug_type": inject_bug_type,
+            "backend": backend,
             "repair_attempts_used": repair_attempts_used,
             "status": "verified" if verification["verified"] else "failed_verification",
             "verified": verification["verified"],
@@ -331,6 +338,7 @@ def run_problem(
                     "repair": repair,
                     "inject_bug": inject_bug,
                     "inject_bug_type": inject_bug_type,
+                    "backend": backend,
                     "error_type": type(exc).__name__,
                     "error_message": str(exc)
                 },
@@ -358,6 +366,12 @@ def main():
         choices=["llm", "regex"],
         default="llm",
         help="Planner to use. Default: llm"
+    )
+    parser.add_argument(
+        "--backend",
+        choices=["pyomo", "idaes"],
+        default=None,
+        help="Optional backend override. Example: --backend idaes"
     )
     parser.add_argument(
         "--explain",
@@ -398,7 +412,8 @@ def main():
         repair=args.repair,
         inject_bug=args.inject_bug,
         max_repair_attempts=args.max_repair_attempts,
-        inject_bug_type=args.inject_bug_type
+        inject_bug_type=args.inject_bug_type,
+        backend=args.backend
     )
 
     print("")
