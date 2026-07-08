@@ -324,6 +324,39 @@ def main():
                 }
             ]
         },
+        {
+            "id": "utility_emissions_optimization",
+            "prompt": (
+                "A process needs 500 kW of heat for 1 hr. "
+                "Steam cost 0.04 $/kWh emissions 0.2 kg CO2/kWh, "
+                "and electric heat cost 0.08 $/kWh emissions 0.05 kg CO2/kWh. "
+                "Emissions must be at most 60 kg CO2/hr. Minimize cost."
+            ),
+            "expected_problem_type": "utility_emissions_optimization",
+            "expected_mode": "minimize_cost_with_emissions_cap",
+            "numeric_expectations": [
+                {
+                    "field": "number_of_utilities",
+                    "expected": 2
+                },
+                {
+                    "field": "total_heat_kwh",
+                    "expected": 500.0
+                },
+                {
+                    "field": "total_cost",
+                    "expected": 30.6666666666667
+                },
+                {
+                    "field": "total_emissions_kg_co2",
+                    "expected": 60.0
+                },
+                {
+                    "field": "emissions_violation_kg_co2",
+                    "expected": 0.0
+                }
+            ]
+        },
     ]
 
     case_results = []
