@@ -54,12 +54,29 @@ def _extract_quality_pairs(text: str) -> dict:
     ):
         key = name.lower()
 
-        if key in {"cost", "source", "final", "limit"}:
+        if key in {"cost", "source", "final", "limit", "max", "maximum"}:
             continue
 
         pairs[key] = _percent_to_fraction(_to_float(value))
 
     return pairs
+
+
+def _extract_max_available_kg(text: str):
+    patterns = [
+        r"\bmax(?:imum)?\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+        r"\bavailability\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+        r"\bavailable\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+        r"\bup\s+to\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+        r"\bno\s+more\s+than\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return _to_float(match.group(1))
+
+    return None
 
 
 def extract_sources(prompt: str) -> list[dict]:
@@ -76,22 +93,26 @@ def extract_sources(prompt: str) -> list[dict]:
     for match in pattern.finditer(prompt):
         name = match.group(1)
         cost = _to_float(match.group(2))
-        quality_text = match.group(3)
-        qualities = _extract_quality_pairs(quality_text)
+        source_text = match.group(3)
+        qualities = _extract_quality_pairs(source_text)
+        max_available_kg = _extract_max_available_kg(source_text)
 
         if not qualities:
-            raise ValueError(f"Could not extract quality percentages for source {name}.")
+            raise ValueError("Could not extract quality percentages for source {}.".format(name))
 
-        sources.append(
-            {
-                "name": name,
-                "cost_per_kg": cost,
-                "qualities": qualities
-            }
-        )
+        source = {
+            "name": name,
+            "cost_per_kg": cost,
+            "qualities": qualities
+        }
+
+        if max_available_kg is not None:
+            source["max_available_kg"] = max_available_kg
+
+        sources.append(source)
 
     if len(sources) < 2:
-        raise ValueError(f"Expected at least two sources, found {len(sources)}.")
+        raise ValueError("Expected at least two sources, found {}.".format(len(sources)))
 
     return sources
 
@@ -128,7 +149,7 @@ def validate_sources_against_limits(sources: list[dict], quality_limits: dict):
 
         if missing:
             raise ValueError(
-                f"Source {source['name']} is missing qualities required by limits: {missing}"
+                "Source {} is missing qualities required by limits: {}".format(source["name"], missing)
             )
 
 
@@ -173,8 +194,8 @@ def plan_general_blend_optimization_problem(prompt: str, trace_dir: Path | None 
 
 if __name__ == "__main__":
     prompt = (
-        "Optimize a blend of 100 kg product using source A cost 2 $/kg sulfur 1% ash 2%, "
-        "source B cost 1 $/kg sulfur 5% ash 1%, and source C cost 1.5 $/kg sulfur 2% ash 3%. "
+        "Optimize a blend of 100 kg product using source A cost 2 $/kg sulfur 1% ash 2% max 40 kg, "
+        "source B cost 1 $/kg sulfur 5% ash 1% max 30 kg, and source C cost 1.5 $/kg sulfur 2% ash 3%. "
         "Final sulfur must be at most 3% and ash must be at most 2%. Minimize cost."
     )
     print(json.dumps(plan_general_blend_optimization_problem(prompt), indent=2, sort_keys=True))

@@ -1,8 +1,5 @@
-"""
-Generated general blend cost optimization model.
-
-Minimize feedstock cost while meeting product mass and multiple quality limits.
-"""
+# Generated general blend cost optimization model.
+# Minimize feedstock cost while meeting product mass, quality limits, and optional source availability bounds.
 
 import json
 import traceback
@@ -17,7 +14,7 @@ def build_model(spec):
     model = pyo.ConcreteModel(name="general_blend_cost_optimization")
 
     if spec["mode"] != "minimize_cost":
-        raise ValueError(f"Unsupported mode: {spec['mode']}")
+        raise ValueError("Unsupported mode: {}".format(spec["mode"]))
 
     source_names = [source["name"] for source in spec["sources"]]
     quality_names = sorted(spec["quality_limits"].keys())
@@ -47,6 +44,12 @@ def build_model(spec):
         for quality_name, limit in spec["quality_limits"].items()
     }
 
+    max_available_by_source = {
+        source["name"]: float(source["max_available_kg"])
+        for source in spec["sources"]
+        if source.get("max_available_kg") is not None
+    }
+
     def objective_rule(m):
         return sum(cost_by_source[source] * m.mass_kg[source] for source in m.SOURCES)
 
@@ -56,6 +59,13 @@ def build_model(spec):
         return sum(m.mass_kg[source] for source in m.SOURCES) == product_mass_kg
 
     model.product_mass_constraint = pyo.Constraint(rule=product_mass_rule)
+
+    def source_availability_rule(m, source):
+        if source not in max_available_by_source:
+            return pyo.Constraint.Skip
+        return m.mass_kg[source] <= max_available_by_source[source]
+
+    model.source_availability_constraints = pyo.Constraint(model.SOURCES, rule=source_availability_rule)
 
     def quality_rule(m, quality_name):
         return (
@@ -91,12 +101,21 @@ def extract_results(model, spec, solver_name, solver_result):
     for source in spec["sources"]:
         name = source["name"]
         mass_kg = pyo.value(model.mass_kg[name])
+        max_available_kg = source.get("max_available_kg")
+
+        if max_available_kg is not None:
+            max_available_kg = float(max_available_kg)
+            availability_slack_kg = max_available_kg - mass_kg
+        else:
+            availability_slack_kg = None
 
         source_results.append(
             {
                 "name": name,
                 "mass_kg": mass_kg,
                 "cost_per_kg": float(source["cost_per_kg"]),
+                "max_available_kg": max_available_kg,
+                "availability_slack_kg": availability_slack_kg,
                 "qualities": {
                     quality_name: float(source["qualities"][quality_name])
                     for quality_name in quality_names
@@ -136,6 +155,14 @@ def extract_results(model, spec, solver_name, solver_result):
         [quality_results[q] - quality_limits[q] for q in quality_names] + [0.0]
     )
 
+    maximum_source_availability_violation_kg = max(
+        [
+            source["mass_kg"] - source["max_available_kg"]
+            for source in source_results
+            if source["max_available_kg"] is not None
+        ] + [0.0]
+    )
+
     result = {
         "problem_type": spec["problem_type"],
         "mode": spec["mode"],
@@ -152,6 +179,7 @@ def extract_results(model, spec, solver_name, solver_result):
 
         "number_of_sources": len(source_results),
         "source_results": source_results,
+        "maximum_source_availability_violation_kg": maximum_source_availability_violation_kg,
 
         "quality_limits": quality_limits,
         "quality_results": quality_results,

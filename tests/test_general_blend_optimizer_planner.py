@@ -52,3 +52,24 @@ def test_plans_general_blend_optimization_problem():
         "ash": 0.03,
         "sulfur": 0.02
     }
+
+
+
+BOUNDED_PROMPT = (
+    "Optimize a blend of 100 kg product using source A cost 2 $/kg sulfur 1% ash 2% max 40 kg, "
+    "source B cost 1 $/kg sulfur 5% ash 1% max 30 kg, and source C cost 1.5 $/kg sulfur 2% ash 3% max 100 kg. "
+    "Final sulfur must be at most 3% and ash must be at most 2%. Minimize cost."
+)
+
+
+def test_plans_general_blend_source_availability_bounds():
+    spec = plan_general_blend_optimization_problem(BOUNDED_PROMPT)
+
+    assert spec["problem_type"] == "general_blend_cost_optimization"
+    assert spec["product_mass_kg"] == 100.0
+
+    sources = {source["name"]: source for source in spec["sources"]}
+
+    assert sources["A"]["max_available_kg"] == 40.0
+    assert sources["B"]["max_available_kg"] == 30.0
+    assert sources["C"]["max_available_kg"] == 100.0

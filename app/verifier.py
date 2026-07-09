@@ -423,13 +423,39 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
         except KeyError as exc:
             failures.append(f"Missing field for general blend quality check: {exc}")
 
+        try:
+            max_availability_violation = float(result.get("maximum_source_availability_violation_kg", 0.0))
+            if max_availability_violation > tolerance:
+                failures.append(
+                    f"Maximum source availability violation {max_availability_violation} kg exceeds tolerance {tolerance}."
+                )
+
+            for source in result["source_results"]:
+                max_available = source.get("max_available_kg")
+                if max_available is None:
+                    continue
+
+                violation = float(source["mass_kg"]) - float(max_available)
+                if violation > tolerance:
+                    failures.append(
+                        f"Source {source.get(name)} availability violation {violation} kg exceeds tolerance {tolerance}."
+                    )
+
+                availability_slack = source.get("availability_slack_kg")
+                if availability_slack is not None and float(availability_slack) < -tolerance:
+                    failures.append(
+                        f"Source {source.get(name)} availability slack {availability_slack} kg is below tolerance."
+                    )
+        except KeyError as exc:
+            failures.append(f"Missing field for general blend availability check: {exc}")
+
         passed = len(failures) == 0
 
         return make_check(
             "optimization_result_consistency",
             passed,
             (
-                "General blend optimization result satisfies mass, cost, and quality checks."
+                "General blend optimization result satisfies mass, cost, quality, and availability checks."
                 if passed
                 else "; ".join(failures)
             )

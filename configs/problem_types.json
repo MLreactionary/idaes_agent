@@ -197,6 +197,10 @@
           "max": 1e-06,
           "min": 0.0
         },
+        "maximum_source_availability_violation_kg": {
+          "max": 1e-06,
+          "min": 0.0
+        },
         "number_of_sources": {
           "max": 1000.0,
           "min": 2.0
@@ -249,7 +253,8 @@
           "quality_limits",
           "quality_results",
           "maximum_quality_violation_fraction",
-          "total_cost"
+          "total_cost",
+          "maximum_source_availability_violation_kg"
         ]
       }
     },
