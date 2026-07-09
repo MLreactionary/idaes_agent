@@ -52,6 +52,12 @@ Controlled repair cases:
 
 Each run writes a Markdown report under outputs/runs/<run_id>/report.md with selected family, backend, equations, variables, objective, constraints, solver result, verification checks, artifact paths, and repair history when applicable.
 
+## Example artifacts
+
+Static generated examples are available under `examples/`.
+
+They include a demo summary, benchmark summary, and representative paper-grade reports for heater, blend optimization, utility emissions optimization, and utility repair.
+
 ## Current limitations
 
 Not yet supported:
