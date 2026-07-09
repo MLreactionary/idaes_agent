@@ -1,309 +1,69 @@
-# IDAES Agent MVP
+# IDAES Agent
 
-<!-- CURRENT_STATUS_START -->
+Autonomous process-modeling agent that converts natural-language process-engineering tasks into executable, verified Pyomo and IDAES-style models.
 
-## Current Project Status
+## Current status
 
-The short-term MVP sprint is complete.
+Expected health check.
 
-### Implemented problem families
+```text
+pytest: 43 passed
+benchmark: 15/15 passed
+demo: 9/9 passed
+```
 
-1. heater_energy_balance
-   - calculate_heat_duty
-   - calculate_outlet_temperature
-   - calculate_mass_flow
+## Supported families
 
-2. adiabatic_mixer
-   - calculate_outlet_temperature
+Process calculations:
 
-3. splitter_mass_balance
-   - calculate_outlet_flows
+- heater_energy_balance
+- adiabatic_mixer
+- splitter_mass_balance
 
-### Interfaces
+Optimization families:
 
-The project now supports both command-line and browser-based usage.
+- blend_cost_optimization
+- general_blend_cost_optimization
+- utility_emissions_optimization
 
-CLI:
+Backend support:
 
-    python scripts/idaes_cli.py "Split 10 kg/s of water with 30% going to outlet 1. What are the outlet flows?"
+- direct Pyomo scaffold backend
+- GLPK-backed linear optimization
+- optional IDAES heater backend smoke path
 
-Streamlit UI:
+## Quick run
 
-    streamlit run scripts/ui_streamlit.py
-
-Full demo:
-
-    python scripts/demo_all.py
-
-Health checks:
-
-    python -m pytest -q
-    python scripts/run_benchmark.py --planner llm
-    python scripts/run_repair_smoke.py
-    python scripts/run_splitter_repair_smoke.py
-    python scripts/demo_all.py
-
-Current expected status:
-
-    35 passed
-    benchmark: 12/12 passed
-    bad import repair smoke: passed
-    splitter repair smoke: passed
-    demo: passed
-
-### Repair coverage
-
-The repair loop now has two controlled repair cases:
-
-1. Generic bad import repair
-   - pyomox -> pyomo
-
-2. Splitter-specific key repair
-   - outlet1_split_fraction_WRONG -> outlet1_split_fraction
-
-<!-- CURRENT_STATUS_END -->
-
-
-
-Autonomous process-modeling agent MVP for small deterministic process-engineering problems.
-
-The system takes a natural-language prompt and runs this loop:
-
-Prompt -> structured spec -> scaffold code generation -> execution -> parsing -> engineering verification -> report -> storage.
-
-This is not yet a full IDAES thermodynamic flowsheet agent. It is a controlled architecture MVP that proves the autonomous loop on simple process-modeling families.
-
-## Current Capabilities
-
-### 1. Heater/Cooler Energy Balance
-
-Equation:
-
-Q = m_dot * Cp * (T_out - T_in)
-
-Supported modes:
-
-1. calculate_heat_duty
-2. calculate_outlet_temperature
-3. calculate_mass_flow
-
-Example prompts:
-
-- Heat water from 300 K to 350 K at 1 bar and report heat duty.
-- Water enters at 300 K and receives 100 kW of heat. What is the outlet temperature?
-- I need to heat water from 25 C to 80 C using 100 kW. What mass flow rate can I process?
-
-### 2. Adiabatic Two-Stream Mixer
-
-Equation:
-
-T_out = (m1 Cp1 T1 + m2 Cp2 T2) / (m1 Cp1 + m2 Cp2)
-
-Example prompt:
-
-- Mix 1 kg/s of water at 300 K with 2 kg/s of water at 360 K. What is the outlet temperature?
-
-Expected outlet temperature:
-
-340 K
-
-## Architecture
-
-Natural-language prompt
--> Planner
--> Structured specification
--> Deterministic unit reconciliation
--> Registry validation
--> Scaffold-based code generation
--> Execution
--> RESULT_JSON parsing
--> Engineering verification
--> SQLite storage
--> Markdown report
-
-## Design Choices
-
-- The LLM helps with interpretation and repair suggestions.
-- The backend owns validation, unit reconciliation, execution, parsing, verification, storage, and reporting.
-- Generated code is written only inside run directories.
-- Repair is constrained and does not blindly trust full LLM rewrites.
-- Verification checks engineering balances, not just whether code ran.
-
-## Setup
-
-Create and activate the environment:
-
-conda create -n idaes_agent python=3.11 -y
-conda activate idaes_agent
-
-Install dependencies:
-
-pip install -r requirements.txt
-
-Install IDAES extensions if needed:
-
-idaes get-extensions
-
-This MVP does not require IPOPT for the current examples because the scaffold models are solved directly.
-
-## LLM Setup
-
-This project currently uses Ollama.
-
-Example .env:
-
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b-instruct
-
-Make sure Ollama is running before LLM-planned heater runs.
-
-## Run Examples
-
-Heater heat duty:
-
-python scripts/run_problem.py --planner llm "Heat water from 300 K to 350 K at 1 bar and report heat duty."
-
-Expected:
-
-heat_duty_w = 209200 W
-
-Heater outlet temperature:
-
-python scripts/run_problem.py --planner llm "Water enters at 300 K and receives 100 kW of heat. What is the outlet temperature?"
-
-Expected:
-
-temperature_out_k around 323.9006 K
-
-Heater mass flow:
-
-python scripts/run_problem.py --planner llm "I need to heat water from 25 C to 80 C using 100 kW. What mass flow rate can I process?"
-
-Expected:
-
-mass_flow_kg_s around 0.43456 kg/s
-
-Adiabatic mixer:
-
-python scripts/run_problem.py --planner llm "Mix 1 kg/s of water at 300 K with 2 kg/s of water at 360 K. What is the outlet temperature?"
-
-Expected:
-
-outlet_temperature_k = 340 K
-
-## Full Demo
-
-Run:
-
-python scripts/demo_all.py
-
-It runs:
-
-1. Heater heat-duty case
-2. Heater outlet-temperature case
-3. Heater mass-flow case
-4. Adiabatic mixer case
-5. Controlled repair smoke case
-
-Expected:
-
-passed: true
-total_cases: 5
-passed_cases: 5
-failed_cases: 0
-
-## Benchmark Suite
-
-Run:
-
-python scripts/run_benchmark.py --planner llm
-
-Expected current result:
-
-11/11 passed
-
-## Repair Smoke Test
-
-Run:
-
-python scripts/run_repair_smoke.py
-
-This intentionally injects a bad import into a generated model and verifies that the repair loop fixes it.
-
-Expected:
-
-passed: true
-repair_attempts_used: 1
-patch_strategy: minimal_import_patch_deterministic
-
-## Test Suite
-
-Run:
-
-python -m pytest -q
-
-Expected current result:
-
-29 passed
-
-Full health check:
-
+```bash
 python -m pytest -q
 python scripts/run_benchmark.py --planner llm
-python scripts/run_repair_smoke.py
 python scripts/demo_all.py
+```
 
-## Output Structure
+## Repair coverage
 
-Runtime outputs are ignored by Git and written under:
+Controlled repair cases:
 
-outputs/
+- bad_import
+- splitter_wrong_split_key
+- utility_wrong_emissions_key
 
-Each run gets its own directory:
+## Reports
 
-outputs/runs/<run_id>/
+Each run writes a Markdown report under outputs/runs/<run_id>/report.md with selected family, backend, equations, variables, objective, constraints, solver result, verification checks, artifact paths, and repair history when applicable.
 
-Typical artifacts:
+## Current limitations
 
-input.json
-structured_spec.json
-generated_model.py
-raw_output.txt
-parsed_result.json
-verification.json
-report.md
-planner_trace.json
+Not yet supported:
 
-## Current Limitations
-
-The current system does not yet support:
-
-- Flash calculations
+- flash calculations
 - VLE
-- Reactors
-- Distillation
-- Optimization
-- Multi-unit flowsheets
-- Real thermodynamic property packages
-- Dynamic simulation
+- reactors
+- distillation
+- arbitrary multi-unit flowsheets
+- real property-package-backed IDAES solves
+- nonlinear optimization
+- mixed-integer process synthesis
+- dynamic simulation
 
-The current physics are intentionally simple. The main achievement is the autonomous modeling architecture.
-
-## Suggested Next Steps
-
-Near-term:
-
-1. Add a README demo transcript.
-2. Add a third problem family, such as splitter mass balance.
-3. Add stronger natural-language parsing for mixer prompts.
-4. Add family-specific repair cases beyond bad imports.
-5. Add a simple CLI interface.
-
-Longer-term:
-
-1. Add real IDAES unit models.
-2. Add property package selection.
-3. Add flowsheet-level composition handling.
-4. Add optimization problems.
-5. Add retrieval over example models and IDAES documentation.
+See docs/capability_summary.md, docs/demo_commands.md, and docs/current_status.md.
