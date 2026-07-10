@@ -56,6 +56,23 @@ def choose_planner(prompt: str, planner: str, run_dir: Path) -> dict:
     if selected_planner_name == "mixer":
         return plan_mixer_problem(prompt, trace_dir=run_dir)
 
+    if selected_planner_name == "base_energy_balance":
+        spec = regex_plan_problem(prompt)
+
+        planner_trace = {
+            "planner": "deterministic_base_energy_balance_planner",
+            "prompt": prompt,
+            "extracted_json": spec,
+            "note": "Registry model selector routed this prompt to the deterministic heater/cooler planner."
+        }
+
+        (run_dir / "planner_trace.json").write_text(
+            json.dumps(planner_trace, indent=2, sort_keys=True),
+            encoding="utf-8"
+        )
+
+        return spec
+
     if is_utility_optimization_prompt(prompt):
         return plan_utility_optimization_problem(prompt, trace_dir=run_dir)
 
