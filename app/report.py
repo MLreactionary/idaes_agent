@@ -28,6 +28,35 @@ def format_percent_fraction(value):
     return f"{100.0 * float(value):.6g}%"
 
 
+def build_model_selection_summary(run_dir: Path) -> list[str]:
+    selection = load_json(Path(run_dir) / "model_selection_trace.json")
+
+    if not selection:
+        return []
+
+    lines = []
+    lines.append("## Model Selection Trace")
+    lines.append("")
+    lines.append(f"- Selector: `{format_value(selection.get('selector'))}`")
+    lines.append(f"- Selected problem type: `{format_value(selection.get('selected_problem_type'))}`")
+    lines.append(f"- Selected planner: `{format_value(selection.get('selected_planner_name'))}`")
+    lines.append(f"- Selected score: `{format_value(selection.get('selected_score'))}`")
+
+    candidates = selection.get("candidates", [])[:5]
+
+    if candidates:
+        lines.append("")
+        lines.append("| Candidate problem type | Planner | Score |")
+        lines.append("|---|---|---:|")
+
+        for candidate in candidates:
+            lines.append(
+                f"| `{candidate.get('problem_type')}` | `{candidate.get('planner_name')}` | `{format_value(candidate.get('score'))}` |"
+            )
+
+    return lines
+
+
 def build_model_overview(spec: dict) -> list[str]:
     problem_type = spec.get("problem_type")
     mode = spec.get("mode")
@@ -248,6 +277,11 @@ def build_heater_engineering_result(result: dict) -> list[str]:
         lines.append(f"- Heat duty: `{format_value(heat_duty_kw)}` kW")
 
     lines.append(f"- Energy balance residual: `{format_value(result.get('energy_balance_residual_w'))}` W")
+
+    if result.get("backend") == "idaes":
+        lines.append("- IDAES FlowsheetBlock created: `" + format_value(result.get("idaes_flowsheet_block_created")) + "`")
+        lines.append("- IDAES solver required: `" + format_value(result.get("idaes_solver_required")) + "`")
+
     return lines
 
 
@@ -294,19 +328,48 @@ def build_general_blend_result(result: dict) -> list[str]:
     lines = []
     lines.append("## Optimization Result")
     lines.append("")
-    lines.append(f"- Product mass: `{format_value(result.get('product_mass_kg'))}` kg")
-    lines.append(f"- Total blended mass: `{format_value(result.get('total_mass_kg'))}` kg")
-    lines.append(f"- Total cost: `{format_value(result.get('total_cost'))}`")
-    lines.append(f"- Maximum quality violation: `{format_value(result.get('maximum_quality_violation_fraction'))}`")
+
+    if result.get("solver_status") == "infeasible":
+        lines.append("- Result status: `infeasible`")
+        lines.append("- Termination condition: `" + format_value(result.get("termination_condition")) + "`")
+        lines.append("- Product mass: `" + format_value(result.get("product_mass_kg")) + "` kg")
+        lines.append("")
+        lines.append("### Infeasibility Diagnosis")
+        lines.append("")
+
+        diagnosis = result.get("infeasibility_diagnosis", {})
+        reasons = diagnosis.get("reasons", [])
+
+        if reasons:
+            for reason in reasons:
+                lines.append("- " + str(reason))
+        else:
+            lines.append("- No diagnosis reasons were returned.")
+
+        return lines
+
+    lines.append("- Product mass: `" + format_value(result.get("product_mass_kg")) + "` kg")
+    lines.append("- Total blended mass: `" + format_value(result.get("total_mass_kg")) + "` kg")
+    lines.append("- Total cost: `" + format_value(result.get("total_cost")) + "`")
+    lines.append("- Mass balance residual: `" + format_value(result.get("mass_balance_residual_kg")) + "` kg")
+    lines.append("- Maximum quality violation: `" + format_value(result.get("maximum_quality_violation_fraction")) + "`")
+    lines.append("- Maximum source availability violation: `" + format_value(result.get("maximum_source_availability_violation_kg")) + "` kg")
+    lines.append("- Maximum minimum usage violation: `" + format_value(result.get("maximum_minimum_usage_violation_kg")) + "` kg")
     lines.append("")
     lines.append("### Source Decisions")
     lines.append("")
-    lines.append("| Source | Mass kg | Cost per kg |")
-    lines.append("|---|---:|---:|")
+    lines.append("| Source | Mass kg | Cost per kg | Max available kg | Availability slack kg | Min required kg | Minimum slack kg |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|")
 
     for source in result.get("source_results", []):
         lines.append(
-            f"| `{source.get('name')}` | `{format_value(source.get('mass_kg'))}` | `{format_value(source.get('cost_per_kg'))}` |"
+            "| `" + format_value(source.get("name")) + "` | `" +
+            format_value(source.get("mass_kg")) + "` | `" +
+            format_value(source.get("cost_per_kg")) + "` | `" +
+            format_value(source.get("max_available_kg")) + "` | `" +
+            format_value(source.get("availability_slack_kg")) + "` | `" +
+            format_value(source.get("min_required_kg")) + "` | `" +
+            format_value(source.get("minimum_usage_slack_kg")) + "` |"
         )
 
     lines.append("")
@@ -321,22 +384,25 @@ def build_general_blend_result(result: dict) -> list[str]:
 
     for quality_name in sorted(quality_limits):
         lines.append(
-            f"| `{quality_name}` | `{format_percent_fraction(quality_results.get(quality_name))}` | `{format_percent_fraction(quality_limits.get(quality_name))}` | `{format_value(quality_slacks.get(quality_name))}` |"
+            "| `" + str(quality_name) + "` | `" +
+            format_percent_fraction(quality_results.get(quality_name)) + "` | `" +
+            format_percent_fraction(quality_limits.get(quality_name)) + "` | `" +
+            format_value(quality_slacks.get(quality_name)) + "` |"
         )
 
     return lines
 
 
-def build_utility_result(result: dict) -> list[str]:
+def build_single_period_utility_result(result: dict) -> list[str]:
     lines = []
     lines.append("## Optimization Result")
     lines.append("")
-    lines.append(f"- Heat demand: `{format_value(result.get('heat_demand_kwh'))}` kWh")
-    lines.append(f"- Total heat supplied: `{format_value(result.get('total_heat_kwh'))}` kWh")
-    lines.append(f"- Total cost: `{format_value(result.get('total_cost'))}`")
-    lines.append(f"- Total emissions: `{format_value(result.get('total_emissions_kg_co2'))}` kg CO2")
-    lines.append(f"- Emissions cap: `{format_value(result.get('emissions_cap_kg_co2'))}` kg CO2")
-    lines.append(f"- Emissions violation: `{format_value(result.get('emissions_violation_kg_co2'))}` kg CO2")
+    lines.append("- Heat demand: `" + format_value(result.get("heat_demand_kwh")) + "` kWh")
+    lines.append("- Total heat supplied: `" + format_value(result.get("total_heat_kwh")) + "` kWh")
+    lines.append("- Total cost: `" + format_value(result.get("total_cost")) + "`")
+    lines.append("- Total emissions: `" + format_value(result.get("total_emissions_kg_co2")) + "` kg CO2")
+    lines.append("- Emissions cap: `" + format_value(result.get("emissions_cap_kg_co2")) + "` kg CO2")
+    lines.append("- Emissions violation: `" + format_value(result.get("emissions_violation_kg_co2")) + "` kg CO2")
     lines.append("")
     lines.append("### Utility Decisions")
     lines.append("")
@@ -345,10 +411,102 @@ def build_utility_result(result: dict) -> list[str]:
 
     for utility in result.get("utility_results", []):
         lines.append(
-            f"| `{utility.get('name')}` | `{format_value(utility.get('heat_kwh'))}` | `{format_value(utility.get('cost'))}` | `{format_value(utility.get('emissions_kg_co2'))}` |"
+            "| `" + format_value(utility.get("name")) + "` | `" +
+            format_value(utility.get("heat_kwh")) + "` | `" +
+            format_value(utility.get("cost")) + "` | `" +
+            format_value(utility.get("emissions_kg_co2")) + "` |"
         )
 
     return lines
+
+
+def build_utility_sweep_result(result: dict) -> list[str]:
+    lines = []
+    lines.append("## Optimization Result")
+    lines.append("")
+    lines.append("- Mode: `emissions cap sweep`")
+    lines.append("- Heat demand: `" + format_value(result.get("heat_demand_kwh")) + "` kWh")
+    lines.append("- Number of sweep points: `" + format_value(result.get("number_of_sweep_points")) + "`")
+    lines.append("- Minimum total cost: `" + format_value(result.get("minimum_total_cost")) + "`")
+    lines.append("- Maximum total cost: `" + format_value(result.get("maximum_total_cost")) + "`")
+    lines.append("- Maximum emissions violation: `" + format_value(result.get("maximum_emissions_violation_kg_co2")) + "` kg CO2")
+    lines.append("")
+    lines.append("### Cost and Emissions Tradeoff")
+    lines.append("")
+    lines.append("| Emissions cap kg CO2 | Status | Total cost | Total emissions kg CO2 | Emissions violation kg CO2 |")
+    lines.append("|---:|---|---:|---:|---:|")
+
+    for point in result.get("sweep_results", []):
+        lines.append(
+            "| `" + format_value(point.get("emissions_cap_kg_co2")) + "` | `" +
+            format_value(point.get("sweep_point_status")) + "` | `" +
+            format_value(point.get("total_cost")) + "` | `" +
+            format_value(point.get("total_emissions_kg_co2")) + "` | `" +
+            format_value(point.get("emissions_violation_kg_co2")) + "` |"
+        )
+
+    return lines
+
+
+def build_multi_period_utility_result(result: dict) -> list[str]:
+    lines = []
+    lines.append("## Optimization Result")
+    lines.append("")
+    lines.append("- Mode: `multi-period emissions-constrained utility planning`")
+    lines.append("- Number of periods: `" + format_value(result.get("number_of_periods")) + "`")
+    lines.append("- Number of utilities: `" + format_value(result.get("number_of_utilities")) + "`")
+    lines.append("- Total heat demand: `" + format_value(result.get("total_heat_demand_kwh")) + "` kWh")
+    lines.append("- Total heat supplied: `" + format_value(result.get("total_heat_kwh")) + "` kWh")
+    lines.append("- Total cost: `" + format_value(result.get("total_cost")) + "`")
+    lines.append("- Total emissions: `" + format_value(result.get("total_emissions_kg_co2")) + "` kg CO2")
+    lines.append("- Total emissions cap: `" + format_value(result.get("total_emissions_cap_kg_co2")) + "` kg CO2")
+    lines.append("- Emissions violation: `" + format_value(result.get("emissions_violation_kg_co2")) + "` kg CO2")
+    lines.append("- Maximum period heat residual: `" + format_value(result.get("maximum_period_heat_balance_residual_kwh")) + "` kWh")
+    lines.append("")
+    lines.append("### Period Summary")
+    lines.append("")
+    lines.append("| Period | Heat demand kWh | Heat supplied kWh | Cost | Emissions kg CO2 | Heat residual kWh |")
+    lines.append("|---|---:|---:|---:|---:|---:|")
+
+    for period in result.get("period_results", []):
+        lines.append(
+            "| `" + format_value(period.get("name")) + "` | `" +
+            format_value(period.get("heat_demand_kwh")) + "` | `" +
+            format_value(period.get("total_heat_kwh")) + "` | `" +
+            format_value(period.get("total_cost")) + "` | `" +
+            format_value(period.get("total_emissions_kg_co2")) + "` | `" +
+            format_value(period.get("heat_balance_residual_kwh")) + "` |"
+        )
+
+    lines.append("")
+    lines.append("### Period Utility Decisions")
+    lines.append("")
+    lines.append("| Period | Utility | Heat kWh | Cost | Emissions kg CO2 |")
+    lines.append("|---|---|---:|---:|---:|")
+
+    for period in result.get("period_results", []):
+        for utility in period.get("utility_results", []):
+            lines.append(
+                "| `" + format_value(period.get("name")) + "` | `" +
+                format_value(utility.get("name")) + "` | `" +
+                format_value(utility.get("heat_kwh")) + "` | `" +
+                format_value(utility.get("cost")) + "` | `" +
+                format_value(utility.get("emissions_kg_co2")) + "` |"
+            )
+
+    return lines
+
+
+def build_utility_result(result: dict) -> list[str]:
+    mode = result.get("mode")
+
+    if mode == "sweep_emissions_cap":
+        return build_utility_sweep_result(result)
+
+    if mode == "multi_period_minimize_cost_with_emissions_cap":
+        return build_multi_period_utility_result(result)
+
+    return build_single_period_utility_result(result)
 
 
 def build_engineering_result(result: dict) -> list[str]:
@@ -468,6 +626,12 @@ def generate_report(run_id: str, original_prompt: str, run_dir: Path) -> Path:
     lines.append("")
     lines.append(original_prompt)
     lines.append("")
+
+    model_selection_lines = build_model_selection_summary(run_dir)
+
+    if model_selection_lines:
+        lines.extend(model_selection_lines)
+        lines.append("")
 
     lines.extend(build_model_overview(spec))
     lines.append("")
