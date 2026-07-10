@@ -73,3 +73,21 @@ def test_plans_general_blend_source_availability_bounds():
     assert sources["A"]["max_available_kg"] == 40.0
     assert sources["B"]["max_available_kg"] == 30.0
     assert sources["C"]["max_available_kg"] == 100.0
+
+
+
+MIN_REQUIRED_PROMPT = (
+    "Optimize a blend of 100 kg product using source A cost 2 $/kg sulfur 1% ash 2% minimum 10 kg, "
+    "source B cost 1 $/kg sulfur 5% ash 1%, and source C cost 1.5 $/kg sulfur 2% ash 3%. "
+    "Final sulfur must be at most 3% and ash must be at most 2%. Minimize cost."
+)
+
+
+def test_plans_general_blend_minimum_required_usage():
+    spec = plan_general_blend_optimization_problem(MIN_REQUIRED_PROMPT)
+
+    sources = {source["name"]: source for source in spec["sources"]}
+
+    assert sources["A"]["min_required_kg"] == 10.0
+    assert "min_required_kg" not in sources["B"]
+    assert "min_required_kg" not in sources["C"]

@@ -123,11 +123,233 @@ def extract_results(model, spec, solver_name, solver_result):
     return result
 
 
+
+def run_emissions_cap_sweep(spec):
+    cap_values = [float(value) for value in spec["emissions_cap_values_kg_co2"]]
+    sweep_results = []
+    all_optimal = True
+
+    for cap_value in cap_values:
+        single_spec = dict(spec)
+        single_spec["mode"] = "minimize_cost_with_emissions_cap"
+        single_spec["emissions_cap_kg_co2"] = cap_value
+
+        model = build_model(single_spec)
+        solver_name, solver_result = solve_model(model, single_spec)
+        termination_condition = str(solver_result.solver.termination_condition)
+
+        if termination_condition.lower() == "optimal":
+            point = extract_results(model, single_spec, solver_name, solver_result)
+            point["emissions_cap_kg_co2"] = cap_value
+            point["sweep_point_status"] = "optimal"
+        else:
+            all_optimal = False
+            point = {
+                "emissions_cap_kg_co2": cap_value,
+                "sweep_point_status": "nonoptimal",
+                "termination_condition": termination_condition
+            }
+
+        sweep_results.append(point)
+
+    optimal_points = [
+        point for point in sweep_results
+        if point.get("sweep_point_status") == "optimal"
+    ]
+
+    total_cost_values = [float(point["total_cost"]) for point in optimal_points]
+    total_emissions_values = [float(point["total_emissions_kg_co2"]) for point in optimal_points]
+    emissions_violation_values = [float(point["emissions_violation_kg_co2"]) for point in optimal_points]
+    heat_residual_values = [abs(float(point["heat_balance_residual_kwh"])) for point in optimal_points]
+
+    result = {
+        "problem_type": spec["problem_type"],
+        "mode": spec["mode"],
+        "backend": "pyomo",
+        "solver_name": spec.get("optimization_solver", "glpk"),
+        "optimization_solver": spec.get("optimization_solver", "glpk"),
+        "solver_status": "ok" if all_optimal else "partial",
+        "termination_condition": "optimal" if all_optimal else "nonoptimal",
+
+        "heat_demand_kwh": float(spec["heat_demand_kwh"]),
+        "number_of_utilities": len(spec["utilities"]),
+        "utilities": spec["utilities"],
+
+        "number_of_sweep_points": len(sweep_results),
+        "emissions_cap_values_kg_co2": cap_values,
+        "sweep_results": sweep_results,
+
+        "minimum_total_cost": min(total_cost_values) if total_cost_values else None,
+        "maximum_total_cost": max(total_cost_values) if total_cost_values else None,
+        "minimum_total_emissions_kg_co2": min(total_emissions_values) if total_emissions_values else None,
+        "maximum_total_emissions_kg_co2": max(total_emissions_values) if total_emissions_values else None,
+        "maximum_emissions_violation_kg_co2": max(emissions_violation_values + [0.0]),
+        "maximum_heat_balance_residual_kwh": max(heat_residual_values + [0.0])
+    }
+
+    return result
+
+
+
+def build_multi_period_model(spec):
+    model = pyo.ConcreteModel(name="multi_period_utility_emissions_optimization")
+
+    if spec["mode"] != "multi_period_minimize_cost_with_emissions_cap":
+        raise ValueError(f"Unsupported mode: {spec[mode]}")
+
+    period_names = [period["name"] for period in spec["periods"]]
+    utility_names = [utility["name"] for utility in spec["utilities"]]
+
+    model.PERIODS = pyo.Set(initialize=period_names)
+    model.UTILITIES = pyo.Set(initialize=utility_names)
+    model.heat_kwh = pyo.Var(model.PERIODS, model.UTILITIES, domain=pyo.NonNegativeReals)
+
+    heat_demand_by_period = {
+        period["name"]: float(period["heat_demand_kwh"])
+        for period in spec["periods"]
+    }
+
+    cost_by_utility = {
+        utility["name"]: float(utility["cost_per_kwh"])
+        for utility in spec["utilities"]
+    }
+
+    emissions_by_utility = {
+        utility["name"]: float(utility["emissions_kg_co2_per_kwh"])
+        for utility in spec["utilities"]
+    }
+
+    total_emissions_cap_kg_co2 = float(spec["total_emissions_cap_kg_co2"])
+
+    def objective_rule(m):
+        return sum(
+            cost_by_utility[utility] * m.heat_kwh[period, utility]
+            for period in m.PERIODS
+            for utility in m.UTILITIES
+        )
+
+    model.total_cost_objective = pyo.Objective(rule=objective_rule, sense=pyo.minimize)
+
+    def period_heat_demand_rule(m, period):
+        return sum(m.heat_kwh[period, utility] for utility in m.UTILITIES) == heat_demand_by_period[period]
+
+    model.period_heat_demand_constraints = pyo.Constraint(model.PERIODS, rule=period_heat_demand_rule)
+
+    def total_emissions_cap_rule(m):
+        return (
+            sum(
+                emissions_by_utility[utility] * m.heat_kwh[period, utility]
+                for period in m.PERIODS
+                for utility in m.UTILITIES
+            )
+            <= total_emissions_cap_kg_co2
+        )
+
+    model.total_emissions_cap_constraint = pyo.Constraint(rule=total_emissions_cap_rule)
+
+    return model
+
+
+def extract_multi_period_results(model, spec, solver_name, solver_result):
+    period_results = []
+    utility_names = [utility["name"] for utility in spec["utilities"]]
+
+    utility_lookup = {
+        utility["name"]: utility
+        for utility in spec["utilities"]
+    }
+
+    total_heat_kwh = 0.0
+    total_cost = 0.0
+    total_emissions_kg_co2 = 0.0
+    max_period_residual = 0.0
+
+    for period in spec["periods"]:
+        period_name = period["name"]
+        heat_demand_kwh = float(period["heat_demand_kwh"])
+        utility_results = []
+
+        for utility_name in utility_names:
+            utility = utility_lookup[utility_name]
+            heat_kwh = pyo.value(model.heat_kwh[period_name, utility_name])
+            cost_per_kwh = float(utility["cost_per_kwh"])
+            emissions_kg_co2_per_kwh = float(utility["emissions_kg_co2_per_kwh"])
+
+            utility_results.append(
+                {
+                    "name": utility_name,
+                    "heat_kwh": heat_kwh,
+                    "cost_per_kwh": cost_per_kwh,
+                    "emissions_kg_co2_per_kwh": emissions_kg_co2_per_kwh,
+                    "cost": cost_per_kwh * heat_kwh,
+                    "emissions_kg_co2": emissions_kg_co2_per_kwh * heat_kwh
+                }
+            )
+
+        period_total_heat_kwh = sum(item["heat_kwh"] for item in utility_results)
+        period_total_cost = sum(item["cost"] for item in utility_results)
+        period_total_emissions_kg_co2 = sum(item["emissions_kg_co2"] for item in utility_results)
+        period_residual = heat_demand_kwh - period_total_heat_kwh
+
+        max_period_residual = max(max_period_residual, abs(period_residual))
+        total_heat_kwh += period_total_heat_kwh
+        total_cost += period_total_cost
+        total_emissions_kg_co2 += period_total_emissions_kg_co2
+
+        period_results.append(
+            {
+                "name": period_name,
+                "heat_demand_kwh": heat_demand_kwh,
+                "total_heat_kwh": period_total_heat_kwh,
+                "heat_balance_residual_kwh": period_residual,
+                "total_cost": period_total_cost,
+                "total_emissions_kg_co2": period_total_emissions_kg_co2,
+                "utility_results": utility_results
+            }
+        )
+
+    total_heat_demand_kwh = sum(float(period["heat_demand_kwh"]) for period in spec["periods"])
+    total_emissions_cap_kg_co2 = float(spec["total_emissions_cap_kg_co2"])
+
+    return {
+        "problem_type": spec["problem_type"],
+        "mode": spec["mode"],
+        "backend": "pyomo",
+        "solver_name": solver_name,
+        "optimization_solver": solver_name,
+        "solver_status": "ok",
+        "termination_condition": str(solver_result.solver.termination_condition),
+
+        "number_of_periods": len(spec["periods"]),
+        "number_of_utilities": len(spec["utilities"]),
+        "period_results": period_results,
+
+        "total_heat_demand_kwh": total_heat_demand_kwh,
+        "total_heat_kwh": total_heat_kwh,
+        "total_heat_balance_residual_kwh": total_heat_demand_kwh - total_heat_kwh,
+        "maximum_period_heat_balance_residual_kwh": max_period_residual,
+
+        "total_emissions_cap_kg_co2": total_emissions_cap_kg_co2,
+        "total_emissions_kg_co2": total_emissions_kg_co2,
+        "emissions_slack_kg_co2": total_emissions_cap_kg_co2 - total_emissions_kg_co2,
+        "emissions_violation_kg_co2": max(total_emissions_kg_co2 - total_emissions_cap_kg_co2, 0.0),
+
+        "total_cost": total_cost
+    }
+
+
 def main():
     try:
-        model = build_model(SPEC)
-        solver_name, solver_result = solve_model(model, SPEC)
-        result = extract_results(model, SPEC, solver_name, solver_result)
+        if SPEC["mode"] == "sweep_emissions_cap":
+            result = run_emissions_cap_sweep(SPEC)
+        elif SPEC["mode"] == "multi_period_minimize_cost_with_emissions_cap":
+            model = build_multi_period_model(SPEC)
+            solver_name, solver_result = solve_model(model, SPEC)
+            result = extract_multi_period_results(model, SPEC, solver_name, solver_result)
+        else:
+            model = build_model(SPEC)
+            solver_name, solver_result = solve_model(model, SPEC)
+            result = extract_results(model, SPEC, solver_name, solver_result)
 
         print("RESULT_JSON_START")
         print(json.dumps(result, indent=2, sort_keys=True))

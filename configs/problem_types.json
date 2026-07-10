@@ -193,6 +193,10 @@
           "max": 1e-06,
           "min": -1e-06
         },
+        "maximum_minimum_usage_violation_kg": {
+          "max": 1e-06,
+          "min": 0.0
+        },
         "maximum_quality_violation_fraction": {
           "max": 1e-06,
           "min": 0.0
@@ -254,7 +258,8 @@
           "quality_results",
           "maximum_quality_violation_fraction",
           "total_cost",
-          "maximum_source_availability_violation_kg"
+          "maximum_source_availability_violation_kg",
+          "maximum_minimum_usage_violation_kg"
         ]
       }
     },
@@ -456,11 +461,25 @@
           "heat_demand_kwh",
           "emissions_cap_kg_co2",
           "utilities"
+        ],
+        "multi_period_minimize_cost_with_emissions_cap": [
+          "mode",
+          "periods",
+          "total_emissions_cap_kg_co2",
+          "utilities"
+        ],
+        "sweep_emissions_cap": [
+          "mode",
+          "heat_demand_kwh",
+          "emissions_cap_values_kg_co2",
+          "utilities"
         ]
       },
       "scaffold": "scaffolds/utility_emissions_optimization.py.template",
       "supported_modes": [
-        "minimize_cost_with_emissions_cap"
+        "minimize_cost_with_emissions_cap",
+        "sweep_emissions_cap",
+        "multi_period_minimize_cost_with_emissions_cap"
       ],
       "verifier": {
         "allowed_solver_statuses": [
@@ -486,7 +505,57 @@
           "total_emissions_kg_co2",
           "emissions_violation_kg_co2",
           "total_cost"
-        ]
+        ],
+        "required_result_fields_by_mode": {
+          "minimize_cost_with_emissions_cap": [
+            "problem_type",
+            "mode",
+            "solver_status",
+            "termination_condition",
+            "optimization_solver",
+            "heat_demand_kwh",
+            "total_heat_kwh",
+            "heat_balance_residual_kwh",
+            "number_of_utilities",
+            "utility_results",
+            "emissions_cap_kg_co2",
+            "total_emissions_kg_co2",
+            "emissions_violation_kg_co2",
+            "total_cost"
+          ],
+          "multi_period_minimize_cost_with_emissions_cap": [
+            "problem_type",
+            "mode",
+            "solver_status",
+            "termination_condition",
+            "optimization_solver",
+            "number_of_periods",
+            "number_of_utilities",
+            "period_results",
+            "total_heat_demand_kwh",
+            "total_heat_kwh",
+            "total_heat_balance_residual_kwh",
+            "maximum_period_heat_balance_residual_kwh",
+            "total_emissions_cap_kg_co2",
+            "total_emissions_kg_co2",
+            "emissions_violation_kg_co2",
+            "total_cost"
+          ],
+          "sweep_emissions_cap": [
+            "problem_type",
+            "mode",
+            "solver_status",
+            "termination_condition",
+            "optimization_solver",
+            "heat_demand_kwh",
+            "number_of_utilities",
+            "number_of_sweep_points",
+            "emissions_cap_values_kg_co2",
+            "sweep_results",
+            "maximum_emissions_violation_kg_co2",
+            "maximum_heat_balance_residual_kwh"
+          ]
+        }
       }
     }
   }

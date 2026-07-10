@@ -19,6 +19,7 @@ from app.splitter_planner import is_splitter_prompt, plan_splitter_problem
 from app.blend_optimizer_planner import is_blend_optimization_prompt, plan_blend_optimization_problem
 from app.general_blend_optimizer_planner import is_general_blend_optimization_prompt, plan_general_blend_optimization_problem
 from app.utility_optimizer_planner import is_utility_optimization_prompt, plan_utility_optimization_problem
+from app.model_selector import write_model_selection_trace
 from app.codegen import write_generated_model
 from app.executor import execute_model
 from app.parser import parse_execution_result
@@ -37,6 +38,24 @@ def make_run_id() -> str:
 
 
 def choose_planner(prompt: str, planner: str, run_dir: Path) -> dict:
+    model_selection = write_model_selection_trace(prompt, trace_dir=run_dir)
+    selected_planner_name = model_selection.get("selected_planner_name")
+
+    if selected_planner_name == "utility_optimizer":
+        return plan_utility_optimization_problem(prompt, trace_dir=run_dir)
+
+    if selected_planner_name == "general_blend_optimizer":
+        return plan_general_blend_optimization_problem(prompt, trace_dir=run_dir)
+
+    if selected_planner_name == "blend_optimizer":
+        return plan_blend_optimization_problem(prompt, trace_dir=run_dir)
+
+    if selected_planner_name == "splitter":
+        return plan_splitter_problem(prompt, trace_dir=run_dir)
+
+    if selected_planner_name == "mixer":
+        return plan_mixer_problem(prompt, trace_dir=run_dir)
+
     if is_utility_optimization_prompt(prompt):
         return plan_utility_optimization_problem(prompt, trace_dir=run_dir)
 

@@ -54,7 +54,7 @@ def _extract_quality_pairs(text: str) -> dict:
     ):
         key = name.lower()
 
-        if key in {"cost", "source", "final", "limit", "max", "maximum"}:
+        if key in {"cost", "source", "final", "limit", "max", "maximum", "min", "minimum", "required"}:
             continue
 
         pairs[key] = _percent_to_fraction(_to_float(value))
@@ -79,6 +79,37 @@ def _extract_max_available_kg(text: str):
     return None
 
 
+
+def _extract_min_required_kg(text: str, source_name: str | None = None, prompt: str | None = None):
+    patterns = [
+        r"\bmin(?:imum)?\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+        r"\brequired\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+        r"\bat\s+least\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+        r"\buse\s+at\s+least\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+        r"\bno\s+less\s+than\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*kg",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return _to_float(match.group(1))
+
+    if source_name is not None and prompt is not None:
+        escaped_source = re.escape(source_name)
+        number = r"([-+]?\d+(?:,\d{3})*(?:\.\d+)?)"
+        source_patterns = [
+            rf"\buse\s+at\s+least\s+{number}\s*kg\s+of\s+source\s+{escaped_source}\b",
+            rf"\bat\s+least\s+{number}\s*kg\s+of\s+source\s+{escaped_source}\b",
+            rf"\bsource\s+{escaped_source}\s+(?:minimum|min|required)\s+{number}\s*kg\b",
+        ]
+
+        for pattern in source_patterns:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if match:
+                return _to_float(match.group(1))
+
+    return None
+
 def extract_sources(prompt: str) -> list[dict]:
     pattern = re.compile(
         r"source\s+([A-Za-z0-9_]+)"
@@ -96,6 +127,7 @@ def extract_sources(prompt: str) -> list[dict]:
         source_text = match.group(3)
         qualities = _extract_quality_pairs(source_text)
         max_available_kg = _extract_max_available_kg(source_text)
+        min_required_kg = _extract_min_required_kg(source_text, name, prompt)
 
         if not qualities:
             raise ValueError("Could not extract quality percentages for source {}.".format(name))
@@ -108,6 +140,9 @@ def extract_sources(prompt: str) -> list[dict]:
 
         if max_available_kg is not None:
             source["max_available_kg"] = max_available_kg
+
+        if min_required_kg is not None:
+            source["min_required_kg"] = min_required_kg
 
         sources.append(source)
 

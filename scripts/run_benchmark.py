@@ -36,6 +36,49 @@ def get_result_value(parsed: dict, field: str):
     return current
 
 
+def evaluate_infeasible_case(case: dict, run_result: dict) -> tuple[bool, list[str]]:
+    messages = []
+
+    run_dir = Path(run_result["run_dir"])
+    parsed_result_path = run_dir / "parsed_result.json"
+
+    if not parsed_result_path.exists():
+        return False, [f"Missing parsed_result.json: {parsed_result_path}"]
+
+    parsed = load_json(parsed_result_path)
+
+    expected_problem_type = case.get("expected_problem_type")
+    if expected_problem_type is not None and parsed.get('problem_type') != expected_problem_type:
+        messages.append(
+            f"Expected problem_type {expected_problem_type}, got {parsed.get('problem_type')}."
+        )
+
+    expected_solver_status = case.get("expected_solver_status", "infeasible")
+    if parsed.get('solver_status') != expected_solver_status:
+        messages.append(
+            f"Expected solver_status {expected_solver_status}, got {parsed.get('solver_status')}."
+        )
+
+    expected_termination = case.get("expected_termination_condition")
+    if expected_termination is not None and parsed.get('termination_condition') != expected_termination:
+        messages.append(
+            f"Expected termination_condition {expected_termination}, got {parsed.get('termination_condition')}."
+        )
+
+    diagnosis = parsed.get("infeasibility_diagnosis", {})
+    reasons = diagnosis.get("reasons", [])
+
+    if not reasons:
+        messages.append("Missing infeasibility diagnosis reasons.")
+
+    for expected_text in case.get("expected_diagnosis_contains", []):
+        joined_reasons = " ".join(str(reason) for reason in reasons).lower()
+        if expected_text.lower() not in joined_reasons:
+            messages.append(f"Expected diagnosis to contain {expected_text!r}, got {reasons}.")
+
+    return len(messages) == 0, messages
+
+
 def evaluate_success_case(case: dict, run_result: dict) -> tuple[bool, list[str]]:
     messages = []
 
@@ -52,7 +95,7 @@ def evaluate_success_case(case: dict, run_result: dict) -> tuple[bool, list[str]
 
     expected_problem_type = case.get("expected_problem_type")
     if expected_problem_type is not None:
-        actual_problem_type = parsed.get("problem_type")
+        actual_problem_type = parsed.get('problem_type')
         if actual_problem_type != expected_problem_type:
             messages.append(
                 f"Expected problem_type {expected_problem_type}, got {actual_problem_type}."
@@ -110,6 +153,7 @@ def run_case(case: dict, planner: str) -> dict:
     case_id = case["id"]
     prompt = case["prompt"]
     expect_error = case.get("expect_error", False)
+    expect_infeasible = case.get("expect_infeasible", False)
 
     print("-" * 80)
     print(f"Running case: {case_id}")
@@ -122,7 +166,8 @@ def run_case(case: dict, planner: str) -> dict:
             explain=False,
             repair=False,
             inject_bug=False,
-            max_repair_attempts=0
+            max_repair_attempts=0,
+            backend=case.get("backend")
         )
 
         if expect_error:
@@ -133,6 +178,17 @@ def run_case(case: dict, planner: str) -> dict:
                 "passed": False,
                 "run_result": run_result,
                 "messages": ["Expected an error, but run succeeded."]
+            }
+        elif expect_infeasible:
+            passed, messages = evaluate_infeasible_case(case, run_result)
+
+            result = {
+                "id": case_id,
+                "prompt": prompt,
+                "outcome": "expected_infeasible" if passed else "failed_infeasible_check",
+                "passed": passed,
+                "run_result": run_result,
+                "messages": messages
             }
         else:
             passed, messages = evaluate_success_case(case, run_result)

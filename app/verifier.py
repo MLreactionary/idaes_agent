@@ -258,10 +258,21 @@ def _check_energy_balance(result: dict, tolerance: float) -> dict:
             failure_label = "General blend mass balance"
 
         elif problem_type == "utility_emissions_optimization":
-            residual = float(result["heat_demand_kwh"]) - float(result["total_heat_kwh"])
-            check_name = "optimization_heat_balance"
-            success_message = "Utility heat demand balance is satisfied."
-            failure_label = "Utility heat balance"
+            if result.get("mode") == "sweep_emissions_cap":
+                residual = float(result["maximum_heat_balance_residual_kwh"])
+                check_name = "optimization_sweep_heat_balance"
+                success_message = "Utility sweep heat demand balances are satisfied."
+                failure_label = "Utility sweep heat balance"
+            elif result.get("mode") == "multi_period_minimize_cost_with_emissions_cap":
+                residual = float(result["maximum_period_heat_balance_residual_kwh"])
+                check_name = "optimization_multi_period_heat_balance"
+                success_message = "Utility multi-period heat demand balances are satisfied."
+                failure_label = "Utility multi-period heat balance"
+            else:
+                residual = float(result["heat_demand_kwh"]) - float(result["total_heat_kwh"])
+                check_name = "optimization_heat_balance"
+                success_message = "Utility heat demand balance is satisfied."
+                failure_label = "Utility heat balance"
 
         else:
             return make_check(
@@ -316,6 +327,72 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
         )
 
     if problem_type == "utility_emissions_optimization":
+        if result.get("mode") == "multi_period_minimize_cost_with_emissions_cap":
+            failures = []
+
+            max_period_heat_residual = float(result.get("maximum_period_heat_balance_residual_kwh", 0.0))
+            if max_period_heat_residual > tolerance:
+                failures.append(
+                    f"Maximum period heat residual {max_period_heat_residual} exceeds tolerance {tolerance}."
+                )
+
+            total_heat_residual = abs(float(result.get("total_heat_balance_residual_kwh", 0.0)))
+            if total_heat_residual > tolerance:
+                failures.append(
+                    f"Total heat residual {total_heat_residual} exceeds tolerance {tolerance}."
+                )
+
+            emissions_violation = float(result.get("emissions_violation_kg_co2", 0.0))
+            if emissions_violation > tolerance:
+                failures.append(
+                    f"Emissions violation {emissions_violation} exceeds tolerance {tolerance}."
+                )
+
+            passed = len(failures) == 0
+
+            return make_check(
+                "optimization_multi_period_result_consistency",
+                passed,
+                (
+                    "Utility multi-period plan satisfies heat and emissions checks."
+                    if passed
+                    else "; ".join(failures)
+                )
+            )
+
+        if result.get("mode") == "sweep_emissions_cap":
+            failures = []
+
+            max_heat_residual = float(result.get("maximum_heat_balance_residual_kwh", 0.0))
+            if max_heat_residual > tolerance:
+                failures.append(
+                    f"Maximum sweep heat residual {max_heat_residual} exceeds tolerance {tolerance}."
+                )
+
+            max_emissions_violation = float(result.get("maximum_emissions_violation_kg_co2", 0.0))
+            if max_emissions_violation > tolerance:
+                failures.append(
+                    f"Maximum sweep emissions violation {max_emissions_violation} exceeds tolerance {tolerance}."
+                )
+
+            for point in result.get("sweep_results", []):
+                if point.get("sweep_point_status") != "optimal":
+                    failures.append(
+                        f"Sweep point at cap {point.get('emissions_cap_kg_co2')} is not optimal."
+                    )
+
+            passed = len(failures) == 0
+
+            return make_check(
+                "optimization_sweep_result_consistency",
+                passed,
+                (
+                    "Utility emissions-cap sweep satisfies heat and emissions checks."
+                    if passed
+                    else "; ".join(failures)
+                )
+            )
+
         failures = []
 
         reported_heat_residual = result.get("heat_balance_residual_kwh")
@@ -438,16 +515,42 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
                 violation = float(source["mass_kg"]) - float(max_available)
                 if violation > tolerance:
                     failures.append(
-                        f"Source {source.get(name)} availability violation {violation} kg exceeds tolerance {tolerance}."
+                        f"Source {source.get('name')} availability violation {violation} kg exceeds tolerance {tolerance}."
                     )
 
                 availability_slack = source.get("availability_slack_kg")
                 if availability_slack is not None and float(availability_slack) < -tolerance:
                     failures.append(
-                        f"Source {source.get(name)} availability slack {availability_slack} kg is below tolerance."
+                        f"Source {source.get('name')} availability slack {availability_slack} kg is below tolerance."
                     )
         except KeyError as exc:
             failures.append(f"Missing field for general blend availability check: {exc}")
+
+        try:
+            max_minimum_usage_violation = float(result.get("maximum_minimum_usage_violation_kg", 0.0))
+            if max_minimum_usage_violation > tolerance:
+                failures.append(
+                    f"Maximum minimum usage violation {max_minimum_usage_violation} kg exceeds tolerance {tolerance}."
+                )
+
+            for source in result["source_results"]:
+                min_required = source.get("min_required_kg")
+                if min_required is None:
+                    continue
+
+                violation = float(min_required) - float(source["mass_kg"])
+                if violation > tolerance:
+                    failures.append(
+                        f"Source {source.get('name')} minimum usage violation {violation} kg exceeds tolerance {tolerance}."
+                    )
+
+                minimum_usage_slack = source.get("minimum_usage_slack_kg")
+                if minimum_usage_slack is not None and float(minimum_usage_slack) < -tolerance:
+                    failures.append(
+                        f"Source {source.get('name')} minimum usage slack {minimum_usage_slack} kg is below tolerance."
+                    )
+        except KeyError as exc:
+            failures.append(f"Missing field for general blend minimum usage check: {exc}")
 
         passed = len(failures) == 0
 
@@ -455,7 +558,7 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
             "optimization_result_consistency",
             passed,
             (
-                "General blend optimization result satisfies mass, cost, quality, and availability checks."
+                "General blend optimization result satisfies mass, cost, quality, availability, and minimum usage checks."
                 if passed
                 else "; ".join(failures)
             )
@@ -604,7 +707,9 @@ def verify_result(parsed_result: dict, structured_spec: dict) -> dict:
     config = get_problem_config(problem_type)
     verifier_config = config.get("verifier", {})
 
-    required_fields = verifier_config.get("required_result_fields", [])
+    mode = structured_spec.get("mode")
+    required_fields_by_mode = verifier_config.get("required_result_fields_by_mode", {})
+    required_fields = required_fields_by_mode.get(mode, verifier_config.get("required_result_fields", []))
     allowed_solver_statuses = verifier_config.get("allowed_solver_statuses", ["ok"])
     allowed_termination_conditions = verifier_config.get("allowed_termination_conditions", ["optimal"])
     energy_tolerance = verifier_config.get("energy_balance_abs_tolerance_w", 1e-6)

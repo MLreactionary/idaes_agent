@@ -50,6 +50,12 @@ def build_model(spec):
         if source.get("max_available_kg") is not None
     }
 
+    min_required_by_source = {
+        source["name"]: float(source["min_required_kg"])
+        for source in spec["sources"]
+        if source.get("min_required_kg") is not None
+    }
+
     def objective_rule(m):
         return sum(cost_by_source[source] * m.mass_kg[source] for source in m.SOURCES)
 
@@ -66,6 +72,13 @@ def build_model(spec):
         return m.mass_kg[source] <= max_available_by_source[source]
 
     model.source_availability_constraints = pyo.Constraint(model.SOURCES, rule=source_availability_rule)
+
+    def source_minimum_usage_rule(m, source):
+        if source not in min_required_by_source:
+            return pyo.Constraint.Skip
+        return m.mass_kg[source] >= min_required_by_source[source]
+
+    model.source_minimum_usage_constraints = pyo.Constraint(model.SOURCES, rule=source_minimum_usage_rule)
 
     def quality_rule(m, quality_name):
         return (
@@ -92,6 +105,98 @@ def solve_model(model, spec):
     return solver_name, result
 
 
+
+def diagnose_infeasibility(spec):
+    reasons = []
+    product_mass_kg = float(spec.get("product_mass_kg", 0.0))
+    sources = spec.get("sources", [])
+
+    max_available_values = [
+        float(source["max_available_kg"])
+        for source in sources
+        if source.get("max_available_kg") is not None
+    ]
+
+    if len(max_available_values) == len(sources) and sum(max_available_values) < product_mass_kg - 1e-9:
+        reasons.append("Total source max availability is less than required product mass.")
+
+    minimum_required_values = [
+        float(source.get("min_required_kg", 0.0) or 0.0)
+        for source in sources
+    ]
+
+    if sum(minimum_required_values) > product_mass_kg + 1e-9:
+        reasons.append("Total minimum required source usage exceeds required product mass.")
+
+    for source in sources:
+        max_available = source.get("max_available_kg")
+        min_required = source.get("min_required_kg")
+
+        if max_available is not None and min_required is not None:
+            if float(min_required) > float(max_available) + 1e-9:
+                reasons.append(
+                    "Source {} minimum required usage exceeds its max availability.".format(source.get("name"))
+                )
+
+    quality_limits = spec.get("quality_limits", {})
+
+    for quality_name, limit in quality_limits.items():
+        available_quality_values = [
+            float(source.get("qualities", {}).get(quality_name))
+            for source in sources
+            if source.get("qualities", {}).get(quality_name) is not None
+        ]
+
+        if available_quality_values and min(available_quality_values) > float(limit) + 1e-9:
+            reasons.append(
+                "Quality {} limit is lower than the best available source quality.".format(quality_name)
+            )
+
+    if not reasons:
+        reasons.append("Optimization solver reported infeasible, but no simple pre-solve diagnosis matched.")
+
+    return {
+        "status": "infeasible",
+        "reasons": reasons
+    }
+
+
+def build_nonoptimal_result(spec, solver_name, solver_result):
+    termination_condition = str(solver_result.solver.termination_condition)
+    termination_lower = termination_condition.lower()
+
+    diagnosis = diagnose_infeasibility(spec)
+    reasons = diagnosis.get("reasons", [])
+    fallback_reason = "Optimization solver reported infeasible, but no simple pre-solve diagnosis matched."
+    has_deterministic_infeasibility_reason = any(reason != fallback_reason for reason in reasons)
+
+    if "infeasible" in termination_lower or has_deterministic_infeasibility_reason:
+        solver_status = "infeasible"
+        termination_condition = "infeasible"
+        diagnosis["status"] = "infeasible"
+    else:
+        solver_status = "nonoptimal"
+        diagnosis = {
+            "status": "nonoptimal",
+            "reasons": [
+                "Optimization solver did not return an optimal solution."
+            ]
+        }
+
+    return {
+        "problem_type": spec.get("problem_type", "unknown"),
+        "mode": spec.get("mode", "unknown"),
+        "backend": "pyomo",
+        "solver_name": solver_name,
+        "optimization_solver": solver_name,
+        "solver_status": solver_status,
+        "termination_condition": termination_condition,
+        "flow_basis": spec.get("flow_basis", "mass"),
+        "product_mass_kg": float(spec.get("product_mass_kg", 0.0)),
+        "infeasibility_diagnosis": diagnosis
+    }
+
+
 def extract_results(model, spec, solver_name, solver_result):
     product_mass_kg = float(spec["product_mass_kg"])
     quality_names = sorted(spec["quality_limits"].keys())
@@ -102,12 +207,19 @@ def extract_results(model, spec, solver_name, solver_result):
         name = source["name"]
         mass_kg = pyo.value(model.mass_kg[name])
         max_available_kg = source.get("max_available_kg")
+        min_required_kg = source.get("min_required_kg")
 
         if max_available_kg is not None:
             max_available_kg = float(max_available_kg)
             availability_slack_kg = max_available_kg - mass_kg
         else:
             availability_slack_kg = None
+
+        if min_required_kg is not None:
+            min_required_kg = float(min_required_kg)
+            minimum_usage_slack_kg = mass_kg - min_required_kg
+        else:
+            minimum_usage_slack_kg = None
 
         source_results.append(
             {
@@ -116,6 +228,8 @@ def extract_results(model, spec, solver_name, solver_result):
                 "cost_per_kg": float(source["cost_per_kg"]),
                 "max_available_kg": max_available_kg,
                 "availability_slack_kg": availability_slack_kg,
+                "min_required_kg": min_required_kg,
+                "minimum_usage_slack_kg": minimum_usage_slack_kg,
                 "qualities": {
                     quality_name: float(source["qualities"][quality_name])
                     for quality_name in quality_names
@@ -163,6 +277,14 @@ def extract_results(model, spec, solver_name, solver_result):
         ] + [0.0]
     )
 
+    maximum_minimum_usage_violation_kg = max(
+        [
+            source["min_required_kg"] - source["mass_kg"]
+            for source in source_results
+            if source["min_required_kg"] is not None
+        ] + [0.0]
+    )
+
     result = {
         "problem_type": spec["problem_type"],
         "mode": spec["mode"],
@@ -180,6 +302,7 @@ def extract_results(model, spec, solver_name, solver_result):
         "number_of_sources": len(source_results),
         "source_results": source_results,
         "maximum_source_availability_violation_kg": maximum_source_availability_violation_kg,
+        "maximum_minimum_usage_violation_kg": maximum_minimum_usage_violation_kg,
 
         "quality_limits": quality_limits,
         "quality_results": quality_results,
@@ -196,7 +319,11 @@ def main():
     try:
         model = build_model(SPEC)
         solver_name, solver_result = solve_model(model, SPEC)
-        result = extract_results(model, SPEC, solver_name, solver_result)
+
+        if str(solver_result.solver.termination_condition).lower() != "optimal":
+            result = build_nonoptimal_result(SPEC, solver_name, solver_result)
+        else:
+            result = extract_results(model, SPEC, solver_name, solver_result)
 
         print("RESULT_JSON_START")
         print(json.dumps(result, indent=2, sort_keys=True))
