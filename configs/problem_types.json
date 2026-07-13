@@ -468,6 +468,11 @@
           "total_emissions_cap_kg_co2",
           "utilities"
         ],
+        "power_dispatch_minimize_cost": [
+          "mode",
+          "power_demand_kwh",
+          "plants"
+        ],
         "sweep_emissions_cap": [
           "mode",
           "heat_demand_kwh",
@@ -479,7 +484,8 @@
       "supported_modes": [
         "minimize_cost_with_emissions_cap",
         "sweep_emissions_cap",
-        "multi_period_minimize_cost_with_emissions_cap"
+        "multi_period_minimize_cost_with_emissions_cap",
+        "power_dispatch_minimize_cost"
       ],
       "verifier": {
         "allowed_solver_statuses": [
@@ -540,6 +546,21 @@
             "total_emissions_kg_co2",
             "emissions_violation_kg_co2",
             "total_cost"
+          ],
+          "power_dispatch_minimize_cost": [
+            "problem_type",
+            "mode",
+            "solver_status",
+            "termination_condition",
+            "optimization_solver",
+            "power_demand_kwh",
+            "total_output_kwh",
+            "power_balance_residual_kwh",
+            "number_of_plants",
+            "plant_results",
+            "total_cost",
+            "total_emissions_kg_co2",
+            "emissions_violation_kg_co2"
           ],
           "sweep_emissions_cap": [
             "problem_type",

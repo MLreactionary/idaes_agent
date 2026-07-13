@@ -121,6 +121,145 @@ def extract_total_emissions_cap_kg_co2(prompt: str) -> float:
 
     raise ValueError("Could not extract total emissions cap in kg CO2.")
 
+
+def extract_power_demand_kwh(prompt: str) -> float | None:
+    patterns = [
+        r"demand\s+of\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:kilowatts|kw)",
+        r"meet\s+(?:a\s+)?(?:fixed\s+)?(?:community\s+)?demand\s+of\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:kilowatts|kw)",
+        r"needs\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:kilowatts|kw)\s+of\s+power",
+    ]
+
+    demand_kw = None
+
+    for pattern in patterns:
+        match = re.search(pattern, prompt, flags=re.IGNORECASE)
+        if match:
+            demand_kw = _to_float(match.group(1))
+            break
+
+    if demand_kw is None:
+        return None
+
+    duration_match = re.search(
+        r"for\s+([-+]?\d+(?:\.\d+)?)\s*(?:hr|hour|hours)",
+        prompt,
+        flags=re.IGNORECASE
+    )
+
+    duration_hr = _to_float(duration_match.group(1)) if duration_match else 1.0
+    return demand_kw * duration_hr
+
+
+def _split_compact_cost_emissions(value: str) -> tuple[float, float]:
+    cleaned = value.replace("$", "").strip()
+
+    if "." in cleaned:
+        before, after = cleaned.split(".", 1)
+
+        if len(before) >= 3:
+            cost = float(before[:-1])
+            emissions = float(before[-1] + "." + after)
+            return cost, emissions
+
+        return float(cleaned), 0.0
+
+    if len(cleaned) >= 2:
+        return float(cleaned[:-1]), float(cleaned[-1])
+
+    return float(cleaned), 0.0
+
+
+def _split_compact_min_max(value: str) -> tuple[float, float]:
+    cleaned = value.replace(",", "").strip()
+
+    if len(cleaned) >= 5:
+        return float(cleaned[:-3]), float(cleaned[-3:])
+
+    if len(cleaned) >= 4:
+        return float(cleaned[:-2]), float(cleaned[-2:])
+
+    raise ValueError("Could not split compact min/max value: " + value)
+
+
+def extract_power_plants(prompt: str) -> list[dict]:
+    clean_prompt = prompt.replace("\n", " ")
+
+    known_names = [
+        "Coal Plant",
+        "Gas Plant",
+        "Biomass Plant",
+        "Solar Plant",
+        "Wind Plant",
+    ]
+
+    positions = []
+
+    for name in known_names:
+        match = re.search(re.escape(name), clean_prompt, flags=re.IGNORECASE)
+        if match:
+            positions.append((match.start(), match.end(), name))
+
+    positions.sort()
+
+    plants = []
+
+    for idx, (_, end, name) in enumerate(positions):
+        next_start = positions[idx + 1][0] if idx + 1 < len(positions) else len(clean_prompt)
+        segment = clean_prompt[end:next_start]
+
+        min_match = re.search(
+            r"min\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:kw|kwh)?",
+            segment,
+            flags=re.IGNORECASE
+        )
+        max_match = re.search(
+            r"max\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:kw|kwh)?",
+            segment,
+            flags=re.IGNORECASE
+        )
+        cost_match = re.search(
+            r"cost\s+\$?([-+]?\d+(?:,\d{3})*(?:\.\d+)?)",
+            segment,
+            flags=re.IGNORECASE
+        )
+        emissions_match = re.search(
+            r"emissions\s+([-+]?\d+(?:,\d{3})*(?:\.\d+)?)",
+            segment,
+            flags=re.IGNORECASE
+        )
+
+        if min_match and max_match and cost_match and emissions_match:
+            min_output = _to_float(min_match.group(1))
+            max_output = _to_float(max_match.group(1))
+            cost = _to_float(cost_match.group(1))
+            emissions = _to_float(emissions_match.group(1))
+        else:
+            numbers = re.findall(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?", segment)
+
+            if len(numbers) >= 4:
+                min_output = _to_float(numbers[0])
+                max_output = _to_float(numbers[1])
+                cost = _to_float(numbers[2])
+                emissions = _to_float(numbers[3])
+            elif len(numbers) >= 2:
+                min_output, max_output = _split_compact_min_max(numbers[0])
+                cost, emissions = _split_compact_cost_emissions(numbers[1])
+            else:
+                continue
+
+        plants.append(
+            {
+                "name": name.lower().replace(" ", "_"),
+                "min_output_kwh": min_output,
+                "max_output_kwh": max_output,
+                "cost_per_kwh": cost,
+                "emissions_per_kwh": emissions,
+            }
+        )
+
+    return plants
+
+
 def extract_emissions_cap_sweep_kg_co2(prompt: str):
     pattern = (
         r"sweep\s+emissions\s+caps?\s+from\s+([-+]?\d+(?:\.\d+)?)\s+"
@@ -155,8 +294,24 @@ def extract_emissions_cap_sweep_kg_co2(prompt: str):
 def plan_utility_optimization_problem(prompt: str, trace_dir: Path | None = None) -> dict:
     periods = extract_period_heat_demands_kwh(prompt)
     sweep_values = extract_emissions_cap_sweep_kg_co2(prompt)
+    power_demand_kwh = extract_power_demand_kwh(prompt)
+    power_plants = extract_power_plants(prompt)
 
-    if len(periods) >= 2:
+    if power_demand_kwh is not None and len(power_plants) >= 2:
+        spec = {
+            "problem_type": "utility_emissions_optimization",
+            "mode": "power_dispatch_minimize_cost",
+            "optimization_solver": "glpk",
+            "power_demand_kwh": power_demand_kwh,
+            "plants": power_plants,
+        }
+
+        try:
+            spec["emissions_cap_kg_co2"] = extract_emissions_cap_kg_co2(prompt)
+        except ValueError:
+            pass
+
+    elif len(periods) >= 2:
         spec = {
             "problem_type": "utility_emissions_optimization",
             "mode": "multi_period_minimize_cost_with_emissions_cap",

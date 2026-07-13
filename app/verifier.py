@@ -258,7 +258,12 @@ def _check_energy_balance(result: dict, tolerance: float) -> dict:
             failure_label = "General blend mass balance"
 
         elif problem_type == "utility_emissions_optimization":
-            if result.get("mode") == "sweep_emissions_cap":
+            if result.get("mode") == "power_dispatch_minimize_cost":
+                residual = float(result["power_balance_residual_kwh"])
+                check_name = "optimization_power_dispatch_balance"
+                success_message = "Power dispatch demand balance is satisfied."
+                failure_label = "Power dispatch balance"
+            elif result.get("mode") == "sweep_emissions_cap":
                 residual = float(result["maximum_heat_balance_residual_kwh"])
                 check_name = "optimization_sweep_heat_balance"
                 success_message = "Utility sweep heat demand balances are satisfied."
@@ -327,6 +332,33 @@ def _check_reported_energy_residual(result: dict, tolerance: float) -> dict:
         )
 
     if problem_type == "utility_emissions_optimization":
+        if result.get("mode") == "power_dispatch_minimize_cost":
+            failures = []
+
+            power_residual = abs(float(result.get("power_balance_residual_kwh", 0.0)))
+            if power_residual > tolerance:
+                failures.append(
+                    f"Power dispatch residual {power_residual} exceeds tolerance {tolerance}."
+                )
+
+            emissions_violation = float(result.get("emissions_violation_kg_co2", 0.0))
+            if emissions_violation > tolerance:
+                failures.append(
+                    f"Emissions violation {emissions_violation} exceeds tolerance {tolerance}."
+                )
+
+            passed = len(failures) == 0
+
+            return make_check(
+                "optimization_power_dispatch_result_consistency",
+                passed,
+                (
+                    "Power dispatch satisfies demand and emissions checks."
+                    if passed
+                    else "; ".join(failures)
+                )
+            )
+
         if result.get("mode") == "multi_period_minimize_cost_with_emissions_cap":
             failures = []
 

@@ -338,10 +338,133 @@ def extract_multi_period_results(model, spec, solver_name, solver_result):
     }
 
 
+
+def build_power_dispatch_model(spec):
+    model = pyo.ConcreteModel(name="power_dispatch_minimize_cost")
+
+    plant_names = [plant["name"] for plant in spec["plants"]]
+    model.PLANTS = pyo.Set(initialize=plant_names)
+
+    min_output_by_plant = {
+        plant["name"]: float(plant.get("min_output_kwh", 0.0))
+        for plant in spec["plants"]
+    }
+
+    max_output_by_plant = {
+        plant["name"]: float(plant["max_output_kwh"])
+        for plant in spec["plants"]
+    }
+
+    cost_by_plant = {
+        plant["name"]: float(plant["cost_per_kwh"])
+        for plant in spec["plants"]
+    }
+
+    emissions_by_plant = {
+        plant["name"]: float(plant.get("emissions_per_kwh", 0.0))
+        for plant in spec["plants"]
+    }
+
+    demand_kwh = float(spec["power_demand_kwh"])
+
+    def output_bounds(m, plant):
+        return (min_output_by_plant[plant], max_output_by_plant[plant])
+
+    model.output_kwh = pyo.Var(model.PLANTS, bounds=output_bounds)
+
+    def objective_rule(m):
+        return sum(cost_by_plant[p] * m.output_kwh[p] for p in m.PLANTS)
+
+    model.total_cost_objective = pyo.Objective(rule=objective_rule, sense=pyo.minimize)
+
+    def demand_rule(m):
+        return sum(m.output_kwh[p] for p in m.PLANTS) == demand_kwh
+
+    model.demand_constraint = pyo.Constraint(rule=demand_rule)
+
+    if spec.get("emissions_cap_kg_co2") is not None:
+        emissions_cap = float(spec["emissions_cap_kg_co2"])
+
+        def emissions_cap_rule(m):
+            return sum(emissions_by_plant[p] * m.output_kwh[p] for p in m.PLANTS) <= emissions_cap
+
+        model.emissions_cap_constraint = pyo.Constraint(rule=emissions_cap_rule)
+
+    return model
+
+
+def extract_power_dispatch_results(model, spec, solver_name, solver_result):
+    plant_lookup = {
+        plant["name"]: plant
+        for plant in spec["plants"]
+    }
+
+    plant_results = []
+
+    for plant_name in model.PLANTS:
+        plant = plant_lookup[plant_name]
+        output_kwh = pyo.value(model.output_kwh[plant_name])
+        cost_per_kwh = float(plant["cost_per_kwh"])
+        emissions_per_kwh = float(plant.get("emissions_per_kwh", 0.0))
+
+        plant_results.append(
+            {
+                "name": plant_name,
+                "output_kwh": output_kwh,
+                "min_output_kwh": float(plant.get("min_output_kwh", 0.0)),
+                "max_output_kwh": float(plant["max_output_kwh"]),
+                "cost_per_kwh": cost_per_kwh,
+                "emissions_per_kwh": emissions_per_kwh,
+                "cost": cost_per_kwh * output_kwh,
+                "emissions_kg_co2": emissions_per_kwh * output_kwh,
+            }
+        )
+
+    power_demand_kwh = float(spec["power_demand_kwh"])
+    total_output_kwh = sum(plant["output_kwh"] for plant in plant_results)
+    total_cost = sum(plant["cost"] for plant in plant_results)
+    total_emissions = sum(plant["emissions_kg_co2"] for plant in plant_results)
+
+    emissions_cap = spec.get("emissions_cap_kg_co2")
+    emissions_cap_value = float(emissions_cap) if emissions_cap is not None else None
+
+    result = {
+        "problem_type": spec["problem_type"],
+        "mode": spec["mode"],
+        "backend": "pyomo",
+        "solver_name": solver_name,
+        "optimization_solver": solver_name,
+        "solver_status": "ok",
+        "termination_condition": str(solver_result.solver.termination_condition),
+
+        "power_demand_kwh": power_demand_kwh,
+        "total_output_kwh": total_output_kwh,
+        "power_balance_residual_kwh": power_demand_kwh - total_output_kwh,
+
+        "number_of_plants": len(plant_results),
+        "plant_results": plant_results,
+
+        "total_cost": total_cost,
+        "total_emissions_kg_co2": total_emissions,
+        "emissions_cap_kg_co2": emissions_cap_value,
+        "emissions_violation_kg_co2": (
+            max(total_emissions - emissions_cap_value, 0.0)
+            if emissions_cap_value is not None
+            else 0.0
+        )
+    }
+
+    return result
+
+
 def main():
     try:
         if SPEC["mode"] == "sweep_emissions_cap":
             result = run_emissions_cap_sweep(SPEC)
+        elif SPEC["mode"] == "power_dispatch_minimize_cost":
+            model = build_power_dispatch_model(SPEC)
+            solver_name, solver_result = solve_model(model, SPEC)
+            result = extract_power_dispatch_results(model, SPEC, solver_name, solver_result)
         elif SPEC["mode"] == "multi_period_minimize_cost_with_emissions_cap":
             model = build_multi_period_model(SPEC)
             solver_name, solver_result = solve_model(model, SPEC)
