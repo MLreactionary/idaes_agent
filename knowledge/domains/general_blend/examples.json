@@ -1,0 +1,26 @@
+[
+  {
+    "id": "animal_feed_protein_fiber",
+    "prompt": "We need to produce exactly 1,000 kg of animal feed. Corn costs 0.30/kg and contains 9% protein and 2% fiber. Soybean meal costs 0.90/kg and contains 50% protein and 8% fiber. Final mix must contain at least 22% protein and at most 5% fiber. Minimize total cost.",
+    "expected_family": "general_blend_cost_optimization",
+    "expected_spec_core": {
+      "product_mass_kg": 1000,
+      "quality_lower_bounds": {
+        "protein": 0.22
+      },
+      "quality_upper_bounds": {
+        "fiber": 0.05
+      }
+    }
+  },
+  {
+    "id": "fuel_blend_octane_sulfur",
+    "prompt": "Blend 500 kg of fuel using regular stock, premium stock, and ethanol. Minimize cost while keeping octane at least 87 and sulfur at most 0.5%.",
+    "expected_family": "general_blend_cost_optimization"
+  },
+  {
+    "id": "ore_blend_iron_phosphorus",
+    "prompt": "Make 200 tons of ore blend. Iron grade must be at least 62% and phosphorus must be at most 0.08%. Choose amounts of available ores to minimize cost.",
+    "expected_family": "general_blend_cost_optimization"
+  }
+]

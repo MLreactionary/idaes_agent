@@ -1,0 +1,56 @@
+{
+  "domain": "general_blend",
+  "problem_type": "general_blend_cost_optimization",
+  "required_fields": [
+    "problem_type",
+    "product_mass_kg",
+    "sources",
+    "objective"
+  ],
+  "source_fields": {
+    "required": [
+      "name",
+      "cost_per_kg",
+      "qualities"
+    ],
+    "optional": [
+      "min_required_kg",
+      "max_available_kg"
+    ]
+  },
+  "optional_fields": [
+    "quality_lower_bounds",
+    "quality_upper_bounds",
+    "quality_targets",
+    "notes"
+  ],
+  "normalized_spec_example": {
+    "problem_type": "general_blend_cost_optimization",
+    "product_mass_kg": 1000,
+    "objective": "minimize_cost",
+    "sources": [
+      {
+        "name": "corn",
+        "cost_per_kg": 0.3,
+        "qualities": {
+          "protein": 0.09,
+          "fiber": 0.02
+        }
+      },
+      {
+        "name": "soybean_meal",
+        "cost_per_kg": 0.9,
+        "qualities": {
+          "protein": 0.5,
+          "fiber": 0.08
+        }
+      }
+    ],
+    "quality_lower_bounds": {
+      "protein": 0.22
+    },
+    "quality_upper_bounds": {
+      "fiber": 0.05
+    }
+  }
+}
