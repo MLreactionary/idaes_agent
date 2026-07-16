@@ -125,3 +125,31 @@ print(\"RESULT_JSON_END\")
     errors = codegen.validate_generated_model_code(code)
 
     assert any("source_lookup[source_name]" in error for error in errors)
+
+
+def test_validate_generated_model_code_rejects_pyomo_objects_in_json():
+    code = """
+import json
+import pyomo.environ as pyo
+
+model = pyo.ConcreteModel()
+model.SOURCES = pyo.Set(initialize=[\"a\", \"b\"])
+model.mass_kg = pyo.Var(model.SOURCES, bounds=(0, None))
+model.objective = pyo.Objective(expr=sum(model.mass_kg[s] for s in model.SOURCES))
+model.constraint = pyo.Constraint(expr=sum(model.mass_kg[s] for s in model.SOURCES) >= 1)
+solver = pyo.SolverFactory(\"glpk\")
+
+result = {
+    \"source_results\": {source_name: {\"mass_kg\": value} for source_name, value in model.mass_kg.items()},
+    \"total_blended_mass_kg\": sum(model.mass_kg.values()),
+    \"mass_balance_residual_kg\": abs(sum(model.mass_kg.values()) - 1),
+}
+print(\"RESULT_JSON_START\")
+print(json.dumps(result, indent=2, sort_keys=True))
+print(\"RESULT_JSON_END\")
+"""
+
+    errors = codegen.validate_generated_model_code(code)
+
+    assert any("model.mass_kg.items()" in error for error in errors)
+    assert any("model.mass_kg.values()" in error for error in errors)

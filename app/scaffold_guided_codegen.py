@@ -100,6 +100,10 @@ def validate_generated_model_code(code: str) -> list[str]:
         "model.total_cost()",
         "source[\"cost_per_kg\"]",
         "source[\"qualities\"]",
+        "model.mass_kg.items()",
+        "model.mass_kg.values()",
+        "sum(model.mass_kg.values())",
+        "abs(sum(model.mass_kg.values())",
     ]
 
     for snippet in forbidden_snippets:
@@ -150,6 +154,10 @@ def build_user_prompt(prompt: str, spec: dict[str, Any], solver_name: str, top_k
             "16. quality_results must be weighted-average qualities",
             "17. include source_results, total_cost, total_blended_mass_kg, mass_balance_residual_kg, solver_status, termination_condition",
             "17a. Convert solver status and termination condition to strings before JSON serialization.",
+            "17b. Every numeric value placed in result JSON must be a Python float, not a Pyomo object.",
+            "17c. Use float(pyo.value(model.mass_kg[source_name])) for source masses.",
+            "17d. Never use model.mass_kg.items() or model.mass_kg.values() when building result JSON.",
+            "17e. Never put Pyomo VarData, Objective, Expression, or AbsExpression objects into json.dumps.",
             "18. do not import app.general_blend_domain_solver",
             "19. never use model.sources.index or model.SOURCES.index",
             "20. final three lines must be exactly:",
@@ -265,6 +273,10 @@ def repair_generated_model_code_after_runtime(
             "3d. In objective use source_lookup[source_name][\"cost_per_kg\"].",
             "3e. In quality constraints use source_lookup[source_name][\"qualities\"][quality_name].",
             "3f. Never use source[\"cost_per_kg\"] or source[\"qualities\"] in expressions.",
+            "3g. The runtime error may be caused by Pyomo objects not being JSON serializable.",
+            "3h. Convert all solution values with float(pyo.value(...)) before json.dumps.",
+            "3i. Never use model.mass_kg.items() or model.mass_kg.values() in the result dictionary.",
+            "3j. Build source_results by looping over model.SOURCES and reading float(pyo.value(model.mass_kg[source_name])).",
             "3b. Use model.mass_kg = pyo.Var(model.SOURCES, bounds=source_bounds).",
             "3c. Never use setattr/getattr/model.__dict__ to create source variables.",
             "3a. Use exactly one indexed variable model.mass_kg[source_name]. Do not create dynamic scalar variables with setattr/getattr.",
