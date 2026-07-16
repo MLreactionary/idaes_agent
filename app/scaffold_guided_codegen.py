@@ -14,6 +14,21 @@ class CodeGenerationError(RuntimeError):
     pass
 
 
+
+GOLDEN_SCAFFOLD_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "knowledge"
+    / "domains"
+    / "general_blend"
+    / "scaffolds"
+    / "golden_pyomo_model.py"
+)
+
+
+def load_golden_blend_scaffold() -> str:
+    return GOLDEN_SCAFFOLD_PATH.read_text(encoding="utf-8")
+
+
 SYSTEM_PROMPT = "\n".join(
     [
         "You are a scaffold-guided Pyomo code generator for process optimization problems.",
@@ -91,6 +106,15 @@ def validate_generated_model_code(code: str) -> list[str]:
         if snippet not in code:
             errors.append("Generated code must use indexed source variable pattern: " + snippet)
 
+    if ("max_available_kg" in code or "min_required_kg" in code) and "bounds=source_bounds" not in code:
+        errors.append("Generated code must use model.mass_kg = pyo.Var(model.SOURCES, bounds=source_bounds) when source bounds exist.")
+
+    if "bounds=source_bounds" in code and "def source_bounds" not in code:
+        errors.append("Generated code must define source_bounds as a function: def source_bounds(m, source_name), not as a dictionary.")
+
+    if "model.SOURCES" in code and "model.SOURCES = pyo.Set" not in code:
+        errors.append("Generated code must define model.SOURCES = pyo.Set(initialize=list(source_lookup.keys())) before using model.SOURCES.")
+
     forbidden_snippets = [
         "solve_general_blend_spec",
         "app.general_blend_domain_solver",
@@ -104,6 +128,8 @@ def validate_generated_model_code(code: str) -> list[str]:
         "model.mass_kg.values()",
         "sum(model.mass_kg.values())",
         "abs(sum(model.mass_kg.values())",
+        "source_bounds = {",
+        "(source_name,):",
     ]
 
     for snippet in forbidden_snippets:
@@ -115,6 +141,7 @@ def validate_generated_model_code(code: str) -> list[str]:
 
 def build_user_prompt(prompt: str, spec: dict[str, Any], solver_name: str, top_k: int) -> str:
     spec_json = json.dumps(spec, indent=2, sort_keys=True)
+    golden_scaffold = load_golden_blend_scaffold()
 
     return "\n".join(
         [
@@ -123,6 +150,11 @@ def build_user_prompt(prompt: str, spec: dict[str, Any], solver_name: str, top_k
             "",
             "Original user prompt:",
             prompt,
+            "",
+            "Golden generic Pyomo scaffold to copy exactly. Copy this structure. Replace only SPEC and SOLVER_NAME. Do not invent a new Pyomo variable structure.",
+            "```python",
+            load_golden_blend_scaffold(),
+            "```",
             "",
             "Structured spec:",
             spec_json,
@@ -139,6 +171,14 @@ def build_user_prompt(prompt: str, spec: dict[str, Any], solver_name: str, top_k
             "6. create model = pyo.ConcreteModel()",
             "7. create model.SOURCES from source names",
             "7a. create exactly one indexed decision variable: model.mass_kg = pyo.Var(model.SOURCES, bounds=source_bounds)",
+            "7b. Never create one variable per source.",
+            "7c. Never use model.__dict__ for variables or constraints.",
+            "7d. Never use setattr or getattr for mass variables.",
+            "7e. All source decisions must be accessed as model.mass_kg[source_name].",
+            "8d. source_bounds must be a function, not a dictionary.",
+            "8e. Correct pattern: def source_bounds(m, source_name): return (0.0, source_lookup[source_name].get(\"max_available_kg\"))",
+            "8f. Never write source_bounds = {...}.",
+            "8g. Never key bounds by (source_name,).",
             "7a. create exactly one indexed decision variable: model.mass_kg = pyo.Var(model.SOURCES, bounds=source_bounds)",
             "8. create nonnegative mass_kg variables with source min/max bounds when present",
             "9. objective minimizes sum(source_lookup[source_name][\"cost_per_kg\"] * model.mass_kg[source_name])",
@@ -184,6 +224,11 @@ def repair_generated_model_code(
         [
             "Rewrite the failed generated Pyomo script.",
             "Output only executable Python code. No markdown. No explanation.",
+            "",
+            "Golden generic Pyomo scaffold to copy exactly. Copy this structure. Replace only SPEC and SOLVER_NAME. Do not invent a new Pyomo variable structure.",
+            "```python",
+            load_golden_blend_scaffold(),
+            "```",
             "",
             "Structured spec:",
             spec_json,
@@ -254,6 +299,11 @@ def repair_generated_model_code_after_runtime(
             "Repair the entire script.",
             "Output only executable Python code. No markdown. No explanation.",
             "",
+            "Golden generic Pyomo scaffold to copy exactly. Copy this structure. Replace only SPEC and SOLVER_NAME. Do not invent a new Pyomo variable structure.",
+            "```python",
+            load_golden_blend_scaffold(),
+            "```",
+            "",
             "Structured spec:",
             spec_json,
             "",
@@ -278,6 +328,9 @@ def repair_generated_model_code_after_runtime(
             "3i. Never use model.mass_kg.items() or model.mass_kg.values() in the result dictionary.",
             "3j. Build source_results by looping over model.SOURCES and reading float(pyo.value(model.mass_kg[source_name])).",
             "3b. Use model.mass_kg = pyo.Var(model.SOURCES, bounds=source_bounds).",
+            "3b1. source_bounds must be a function: def source_bounds(m, source_name): return (lb, ub).",
+            "3b2. Never define source_bounds as a dictionary.",
+            "3b3. Never key source bounds by (source_name,).",
             "3c. Never use setattr/getattr/model.__dict__ to create source variables.",
             "3a. Use exactly one indexed variable model.mass_kg[source_name]. Do not create dynamic scalar variables with setattr/getattr.",
             "3a. Use exactly one indexed variable model.mass_kg[source_name]. Do not create dynamic scalar variables with setattr/getattr.",

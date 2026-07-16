@@ -157,6 +157,36 @@ def normalize_result_with_spec(spec: dict, result: dict) -> dict:
     result["maximum_quality_lower_violation"] = max([max(-slack, 0.0) for slack in quality_lower_slacks.values()] or [0.0])
     result["maximum_quality_upper_violation"] = max([max(-slack, 0.0) for slack in quality_upper_slacks.values()] or [0.0])
 
+    maximum_source_bound_violation = 0.0
+
+    for source_result in normalized_sources:
+        mass_kg = float(source_result.get("mass_kg", 0.0))
+        min_required_kg = source_result.get("min_required_kg")
+        max_available_kg = source_result.get("max_available_kg")
+
+        if min_required_kg is not None:
+            minimum_usage_slack_kg = mass_kg - float(min_required_kg)
+            source_result["minimum_usage_slack_kg"] = minimum_usage_slack_kg
+            maximum_source_bound_violation = max(maximum_source_bound_violation, max(-minimum_usage_slack_kg, 0.0))
+
+        if max_available_kg is not None:
+            availability_slack_kg = float(max_available_kg) - mass_kg
+            source_result["availability_slack_kg"] = availability_slack_kg
+            maximum_source_bound_violation = max(maximum_source_bound_violation, max(-availability_slack_kg, 0.0))
+
+    result["maximum_source_bound_violation"] = maximum_source_bound_violation
+
+    maximum_constraint_violation = max(
+        abs(float(result.get("mass_balance_residual_kg", 0.0))),
+        float(result.get("maximum_quality_lower_violation", 0.0)),
+        float(result.get("maximum_quality_upper_violation", 0.0)),
+        maximum_source_bound_violation,
+    )
+    result["maximum_constraint_violation"] = maximum_constraint_violation
+
+    if maximum_constraint_violation > 1e-6:
+        result["solver_status"] = "invalid_generated_solution"
+
     if "solver_status" in result:
         result["solver_status"] = str(result["solver_status"])
 
