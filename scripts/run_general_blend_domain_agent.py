@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.llm_spec_extractor import extract_general_blend_spec
+from app.scaffold_guided_codegen import generate_scaffold_guided_model_code, repair_generated_model_code_after_runtime
 
 
 def make_run_dir() -> Path:
@@ -36,6 +37,133 @@ def extract_result_json(raw_output: str) -> dict:
 
     payload = raw_output[start + len(start_marker):end].strip()
     return json.loads(payload)
+
+
+def write_llm_generated_model(run_dir: Path, prompt: str, spec: dict, solver_name: str) -> Path:
+    generated_path = run_dir / "generated_model.py"
+
+    code = generate_scaffold_guided_model_code(
+        prompt=prompt,
+        spec=spec,
+        solver_name=solver_name,
+        trace_dir=run_dir,
+    )
+
+    generated_path.write_text(code, encoding="utf-8")
+    return generated_path
+
+
+def normalize_result_with_spec(spec: dict, result: dict) -> dict:
+    if not isinstance(result, dict):
+        return result
+
+    source_lookup = {
+        source["name"]: source
+        for source in spec.get("sources", [])
+    }
+
+    product_mass = float(spec.get("product_mass_kg", 0.0))
+    raw_source_results = result.get("source_results", [])
+    normalized_sources = []
+
+    if isinstance(raw_source_results, dict):
+        items = raw_source_results.items()
+        for source_name, value in items:
+            if isinstance(value, dict):
+                mass_kg = float(value.get("mass_kg", value.get("mass", 0.0)))
+            else:
+                mass_kg = float(value)
+
+            source = source_lookup.get(source_name, {})
+            cost_per_kg = float(source.get("cost_per_kg", 0.0))
+
+            normalized_sources.append(
+                {
+                    "name": source_name,
+                    "mass_kg": mass_kg,
+                    "cost_per_kg": cost_per_kg,
+                    "cost": mass_kg * cost_per_kg,
+                    "qualities": source.get("qualities", {}),
+                    "min_required_kg": source.get("min_required_kg"),
+                    "max_available_kg": source.get("max_available_kg"),
+                }
+            )
+
+    elif isinstance(raw_source_results, list):
+        for item in raw_source_results:
+            if not isinstance(item, dict):
+                continue
+
+            source_name = item.get("name")
+            if source_name is None:
+                continue
+
+            mass_kg = float(item.get("mass_kg", item.get("mass", 0.0)))
+            source = source_lookup.get(source_name, {})
+            cost_per_kg = float(item.get("cost_per_kg", source.get("cost_per_kg", 0.0)))
+
+            enriched = dict(item)
+            enriched["name"] = source_name
+            enriched["mass_kg"] = mass_kg
+            enriched["cost_per_kg"] = cost_per_kg
+            enriched["cost"] = float(item.get("cost", mass_kg * cost_per_kg))
+            enriched["qualities"] = item.get("qualities", source.get("qualities", {}))
+            normalized_sources.append(enriched)
+
+    total_mass = sum(source["mass_kg"] for source in normalized_sources)
+    total_cost = sum(source["cost"] for source in normalized_sources)
+
+    quality_names = sorted(
+        {
+            quality_name
+            for source in source_lookup.values()
+            for quality_name in source.get("qualities", {}).keys()
+        }
+    )
+
+    quality_results = {}
+
+    if abs(total_mass) > 1e-12:
+        for quality_name in quality_names:
+            quality_results[quality_name] = sum(
+                float(source.get("qualities", {}).get(quality_name, 0.0)) * source["mass_kg"]
+                for source in normalized_sources
+            ) / total_mass
+
+    lower_bounds = spec.get("quality_lower_bounds", {}) or {}
+    upper_bounds = spec.get("quality_upper_bounds", {}) or {}
+
+    quality_lower_slacks = {
+        name: quality_results.get(name, 0.0) - float(bound)
+        for name, bound in lower_bounds.items()
+    }
+
+    quality_upper_slacks = {
+        name: float(bound) - quality_results.get(name, 0.0)
+        for name, bound in upper_bounds.items()
+    }
+
+    result["problem_type"] = spec.get("problem_type", "general_blend_cost_optimization")
+    result["backend"] = result.get("backend", "llm_generated_pyomo")
+    result["source_results"] = normalized_sources
+    result["total_blended_mass_kg"] = total_mass
+    result["total_cost"] = total_cost
+    result["mass_balance_residual_kg"] = product_mass - total_mass
+    result["quality_results"] = quality_results
+    result["quality_lower_bounds"] = lower_bounds
+    result["quality_upper_bounds"] = upper_bounds
+    result["quality_lower_slacks"] = quality_lower_slacks
+    result["quality_upper_slacks"] = quality_upper_slacks
+    result["maximum_quality_lower_violation"] = max([max(-slack, 0.0) for slack in quality_lower_slacks.values()] or [0.0])
+    result["maximum_quality_upper_violation"] = max([max(-slack, 0.0) for slack in quality_upper_slacks.values()] or [0.0])
+
+    if "solver_status" in result:
+        result["solver_status"] = str(result["solver_status"])
+
+    if "termination_condition" in result:
+        result["termination_condition"] = str(result["termination_condition"])
+
+    return result
 
 
 def write_generated_model(run_dir: Path, spec: dict, solver_name: str) -> Path:
@@ -107,7 +235,21 @@ def write_report(run_dir: Path, prompt: str, spec: dict, result: dict) -> None:
             ]
         )
 
-        for source in result.get("source_results", []):
+        source_results = result.get("source_results", [])
+
+        if isinstance(source_results, dict):
+            normalized_sources = []
+            for source_name, value in source_results.items():
+                if isinstance(value, dict):
+                    item = {"name": source_name}
+                    item.update(value)
+                else:
+                    item = {"name": source_name, "mass_kg": value}
+                normalized_sources.append(item)
+        else:
+            normalized_sources = source_results
+
+        for source in normalized_sources:
             lines.append(
                 f"- {source.get('name')}: {source.get('mass_kg')} kg, cost {source.get('cost')}"
             )
@@ -126,7 +268,7 @@ def write_report(run_dir: Path, prompt: str, spec: dict, result: dict) -> None:
     (run_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_domain_agent(prompt: str, solver_name: str = "glpk") -> dict:
+def run_domain_agent(prompt: str, solver_name: str = "glpk", codegen_mode: str = "wrapper") -> dict:
     run_dir = make_run_dir()
 
     (run_dir / "input_prompt.txt").write_text(prompt + "\n", encoding="utf-8")
@@ -138,7 +280,12 @@ def run_domain_agent(prompt: str, solver_name: str = "glpk") -> dict:
         encoding="utf-8",
     )
 
-    generated_model_path = write_generated_model(run_dir, spec, solver_name)
+    if codegen_mode == "llm":
+        generated_model_path = write_llm_generated_model(run_dir, prompt, spec, solver_name)
+    elif codegen_mode == "wrapper":
+        generated_model_path = write_generated_model(run_dir, spec, solver_name)
+    else:
+        raise ValueError("Unsupported codegen mode: " + codegen_mode)
 
     completed = subprocess.run(
         [sys.executable, str(generated_model_path)],
@@ -151,12 +298,37 @@ def run_domain_agent(prompt: str, solver_name: str = "glpk") -> dict:
     raw_output = completed.stdout + completed.stderr
     (run_dir / "raw_output.txt").write_text(raw_output, encoding="utf-8")
 
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"Generated model failed with return code {completed.returncode}. See {run_dir / raw_output.txt}"
+    if completed.returncode != 0 and codegen_mode == "llm":
+        broken_code = generated_model_path.read_text(encoding="utf-8")
+        repaired_code = repair_generated_model_code_after_runtime(
+            prompt=prompt,
+            spec=spec,
+            solver_name=solver_name,
+            broken_code=broken_code,
+            raw_output=raw_output,
         )
 
-    result = extract_result_json(raw_output)
+        repaired_model_path = run_dir / "generated_model_runtime_repair.py"
+        repaired_model_path.write_text(repaired_code, encoding="utf-8")
+        generated_model_path = repaired_model_path
+
+        completed = subprocess.run(
+            [sys.executable, str(generated_model_path)],
+            cwd=str(PROJECT_ROOT),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        raw_output = completed.stdout + completed.stderr
+        (run_dir / "raw_output_after_runtime_repair.txt").write_text(raw_output, encoding="utf-8")
+
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"Generated model failed with return code {completed.returncode}. See {run_dir / 'raw_output.txt'} and runtime repair output if present."
+        )
+
+    result = normalize_result_with_spec(spec, extract_result_json(raw_output))
 
     (run_dir / "parsed_result.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n",
@@ -180,10 +352,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("prompt")
     parser.add_argument("--solver", default="glpk")
+    parser.add_argument("--codegen", choices=["wrapper", "llm"], default="wrapper")
 
     args = parser.parse_args()
 
-    result = run_domain_agent(args.prompt, solver_name=args.solver)
+    result = run_domain_agent(args.prompt, solver_name=args.solver, codegen_mode=args.codegen)
     print(json.dumps(result, indent=2, sort_keys=True))
 
 
