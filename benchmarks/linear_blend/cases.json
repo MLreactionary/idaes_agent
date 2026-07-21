@@ -1,0 +1,86 @@
+[
+  {
+    "name": "easy_animal_feed_protein_fiber",
+    "difficulty": "easy",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Produce exactly 1000 kg of animal feed. Corn costs 0.30 per kg and has protein 9 percent and fiber 2 percent. Soybean meal costs 0.90 per kg and has protein 50 percent and fiber 8 percent. Final feed must have protein at least 22 percent and fiber at most 5 percent. Minimize total cost."
+  },
+  {
+    "name": "easy_solvent_purity_impurity",
+    "difficulty": "easy",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Blend exactly 100 kg of solvent product. Fresh solvent costs 3.00 per kg and has purity 0.99 and impurity 0.01. Intermediate solvent costs 2.00 per kg and has purity 0.93 and impurity 0.07. Final product must have purity at least 0.95 and impurity at most 0.05. Minimize total cost."
+  },
+  {
+    "name": "easy_resin_strength_brittleness",
+    "difficulty": "easy",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Find the minimum-cost blend to produce exactly 1500 kg of resin product. Resin A costs 4.00 per kg, has strength 0.90 and brittleness 0.20, and at most 500 kg is available. Resin B costs 2.50 per kg, has strength 0.70 and brittleness 0.35, and at most 900 kg is available. Resin C costs 1.80 per kg and has strength 0.50 and brittleness 0.50. Final resin must have average strength at least 0.68 and average brittleness at most 0.36. Minimize total cost."
+  },
+  {
+    "name": "medium_paint_viscosity_voc",
+    "difficulty": "medium",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Find the minimum-cost blend to produce exactly 750 kg of paint base. Solvent A costs 1.20 per kg and has viscosity 0.30 and VOC 0.08, with at most 300 kg available. Solvent B costs 0.90 per kg and has viscosity 0.20 and VOC 0.14, with at most 500 kg available. Solvent C costs 1.50 per kg and has viscosity 0.50 and VOC 0.04. Final blend must have viscosity at least 0.28 and VOC at most 0.10. Minimize total cost."
+  },
+  {
+    "name": "medium_ore_iron_silica",
+    "difficulty": "medium",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Make exactly 200 kg of ore feed. Mine A costs 45 per kg and contains iron 58 percent and silica 8 percent. Mine B costs 60 per kg and contains iron 65 percent and silica 4 percent. Mine C costs 50 per kg and contains iron 62 percent and silica 6 percent. Final feed must contain at least 62 percent iron and at most 6 percent silica. Mine B has at most 80 kg available. Minimize total cost."
+  },
+  {
+    "name": "medium_fuel_sulfur_octane",
+    "difficulty": "medium",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Produce exactly 500 kg of gasoline blend. Regular stream costs 0.80 per kg and has sulfur 0.04 and octane 87. Premium stream costs 1.20 per kg and has sulfur 0.01 and octane 95. Reformate costs 1.50 per kg and has sulfur 0.005 and octane 100. Final blend must have sulfur at most 0.02 and octane at least 92. Minimize total cost."
+  },
+  {
+    "name": "hard_crude_oil_units",
+    "difficulty": "hard",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Find the minimum-cost blend of three crude oils to produce exactly 5000 barrels of refinery feedstock. Crude 1 costs 75 per barrel, has sulfur 0.005, viscosity 15.0, API gravity 38.0, and at most 3000 barrels available. Crude 2 costs 60 per barrel, has sulfur 0.018, viscosity 45.0, API gravity 29.0, and at most 2500 barrels available. Crude 3 costs 48 per barrel, has sulfur 0.032, viscosity 120.0, and API gravity 20.0, and at most 1500 barrels available. The final feedstock must have average sulfur at most 0.015, average viscosity at most 40.0, and average API gravity at least 31.0. Minimize total cost."
+  },
+  {
+    "name": "hard_chemical_units_percent_mixed",
+    "difficulty": "hard",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Formulate and solve the least-cost blend for exactly 2000 kg of industrial solvent. Ingredient 1 costs 12 per kg, has purity 95 percent and viscosity 1.2 cP, with at most 1500 kg available. Ingredient 2 costs 8 per kg, has purity 80 percent and viscosity 2.8 cP, with at most 1200 kg available. Ingredient 3 costs 5 per kg, has purity 60 percent and viscosity 4.5 cP, with at most 800 kg available. The final blend must have purity at least 82 percent and viscosity at most 2.5 cP. Minimize cost."
+  },
+  {
+    "name": "hard_source_minimum_requirement",
+    "difficulty": "hard",
+    "family": "single_product_linear_blend",
+    "expected_status": "optimal",
+    "prompt": "Produce exactly 1000 kg of polymer blend at minimum cost. Base polymer costs 2.00 per kg and has strength 0.60 and flexibility 0.80. Reinforced polymer costs 5.00 per kg and has strength 0.95 and flexibility 0.40, and must be used at least 200 kg. Recycled polymer costs 1.00 per kg and has strength 0.40 and flexibility 0.90, with at most 500 kg available. Final blend must have strength at least 0.65 and flexibility at least 0.70. Minimize total cost."
+  },
+  {
+    "name": "infeasible_not_enough_availability",
+    "difficulty": "infeasible",
+    "family": "single_product_linear_blend",
+    "expected_status": "infeasible",
+    "prompt": "Produce exactly 1000 kg of blend. Source A costs 1 per kg and has purity 0.90, with at most 300 kg available. Source B costs 2 per kg and has purity 0.95, with at most 400 kg available. Final blend must have purity at least 0.92. Minimize total cost."
+  },
+  {
+    "name": "infeasible_quality_too_high",
+    "difficulty": "infeasible",
+    "family": "single_product_linear_blend",
+    "expected_status": "infeasible",
+    "prompt": "Produce exactly 1000 kg of chemical blend. Source A costs 1 per kg and has purity 0.80. Source B costs 2 per kg and has purity 0.85. Source C costs 3 per kg and has purity 0.90. Final blend must have purity at least 0.95. Minimize total cost."
+  },
+  {
+    "name": "infeasible_mandatory_dirty_source",
+    "difficulty": "infeasible",
+    "family": "single_product_linear_blend",
+    "expected_status": "infeasible",
+    "prompt": "Produce exactly 1000 kg of solvent blend. Clean solvent costs 4 per kg and has impurity 0.01. Medium solvent costs 2 per kg and has impurity 0.05. Dirty recovered solvent costs 0.50 per kg and has impurity 0.20, and must be used at least 500 kg. Final product must have impurity at most 0.04. Minimize total cost."
+  }
+]
