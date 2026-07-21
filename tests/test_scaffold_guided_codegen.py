@@ -153,3 +153,38 @@ print(\"RESULT_JSON_END\")
 
     assert any("model.mass_kg.items()" in error for error in errors)
     assert any("model.mass_kg.values()" in error for error in errors)
+
+
+def test_build_linear_blend_formulation_plan():
+    spec = {
+        "problem_type": "general_blend_cost_optimization",
+        "objective": "minimize_cost",
+        "product_mass_kg": 1000.0,
+        "quality_lower_bounds": {"purity": 0.95},
+        "quality_upper_bounds": {"impurity": 0.05},
+        "sources": [
+            {
+                "name": "clean",
+                "cost_per_kg": 3.0,
+                "max_available_kg": 600.0,
+                "qualities": {"purity": 0.99, "impurity": 0.01},
+            },
+            {
+                "name": "dirty",
+                "cost_per_kg": 1.0,
+                "min_required_kg": 100.0,
+                "qualities": {"purity": 0.90, "impurity": 0.10},
+            },
+        ],
+    }
+
+    plan = codegen.build_linear_blend_formulation_plan(spec)
+
+    assert plan["problem_family"] == "linear_blend"
+    assert plan["formulation_type"] == "single_product_linear_blend"
+    assert plan["decision_variable_shape"] == "x[source]"
+    assert plan["source_bounds"]["has_upper_bounds"] is True
+    assert plan["source_bounds"]["has_lower_bounds"] is True
+    assert plan["quality_constraints"]["lower_bounds"] == ["purity"]
+    assert plan["quality_constraints"]["upper_bounds"] == ["impurity"]
+    assert plan["solver_class"] == "linear_program"

@@ -31,17 +31,31 @@ def load_golden_blend_scaffold() -> str:
 
 SYSTEM_PROMPT = "\n".join(
     [
-        "You are a scaffold-guided Pyomo code generator for process optimization problems.",
+        "You are a formulation-plan-guided Pyomo code generator for linear blending optimization.",
         "Generate a complete executable Python script.",
         "Output only Python code.",
         "Do not output markdown.",
         "Do not explain the code.",
+        "You are given a validated structured spec, a formulation plan, a required result JSON contract, and a golden Pyomo scaffold.",
+        "Use the structured spec as the single source of truth.",
+        "Use the formulation plan to choose the modeling pattern.",
+        "Use the golden scaffold as the coding pattern.",
+        "Do not reinterpret the original natural-language prompt.",
+        "Do not change units, bounds, source names, quality names, or objective.",
+        "Do not solve the optimization manually.",
+        "Do not invent a new Pyomo variable structure.",
+        "Write minimal Pyomo code with no unnecessary helper logic.",
+        "For single-product linear blends, use exactly one indexed variable model.mass_kg[source_name].",
+        "Use model.SOURCES and source_lookup[source_name].",
+        "Use source_bounds for min_required_kg and max_available_kg.",
+        "Build weighted-average quality constraints from quality_lower_bounds and quality_upper_bounds.",
         "The script must build and solve the optimization model directly using Pyomo.",
         "The script must be self contained except for pyomo and standard library imports.",
         "Do not import app.general_blend_domain_solver.",
         "Do not call solve_general_blend_spec.",
         "The script must print RESULT_JSON_START before the result JSON.",
         "The script must print RESULT_JSON_END after the result JSON.",
+        "If the solver termination is not optimal, print solver_status and termination_condition without reading variable values.",
     ]
 )
 
@@ -139,8 +153,58 @@ def validate_generated_model_code(code: str) -> list[str]:
     return errors
 
 
+
+def build_linear_blend_formulation_plan(spec: dict[str, Any]) -> dict[str, Any]:
+    sources = spec.get("sources", []) or []
+    lower_bounds = spec.get("quality_lower_bounds", {}) or {}
+    upper_bounds = spec.get("quality_upper_bounds", {}) or {}
+
+    has_upper_bounds = any(
+        source.get("max_available_kg") is not None
+        for source in sources
+    )
+    has_lower_bounds = any(
+        source.get("min_required_kg") is not None
+        for source in sources
+    )
+
+    return {
+        "problem_family": "linear_blend",
+        "formulation_type": "single_product_linear_blend",
+        "decision_variable_shape": "x[source]",
+        "pyomo_variable_name": "model.mass_kg[source_name]",
+        "objective": "minimize_total_cost",
+        "objective_expression": "sum(cost_per_kg[source] * x[source] for source in sources)",
+        "demand_constraint": "sum(x[source] for source in sources) == product_mass_kg",
+        "source_bounds": {
+            "has_upper_bounds": has_upper_bounds,
+            "has_lower_bounds": has_lower_bounds,
+            "implementation": "use bounds=source_bounds on model.mass_kg",
+        },
+        "quality_constraints": {
+            "lower_bounds": sorted(lower_bounds.keys()),
+            "upper_bounds": sorted(upper_bounds.keys()),
+            "lower_form": "sum(q[source, quality] * x[source]) >= lower_bound[quality] * product_mass_kg",
+            "upper_form": "sum(q[source, quality] * x[source]) <= upper_bound[quality] * product_mass_kg",
+        },
+        "solver_class": "linear_program",
+        "recommended_scaffold": "single_product_linear_blend",
+        "required_result_contract": [
+            "source_results",
+            "total_cost",
+            "total_blended_mass_kg",
+            "mass_balance_residual_kg",
+            "quality_results",
+            "solver_status",
+            "termination_condition",
+        ],
+    }
+
+
 def build_user_prompt(prompt: str, spec: dict[str, Any], solver_name: str, top_k: int) -> str:
     spec_json = json.dumps(spec, indent=2, sort_keys=True)
+    formulation_plan = build_linear_blend_formulation_plan(spec)
+    formulation_plan_json = json.dumps(formulation_plan, indent=2, sort_keys=True)
     golden_scaffold = load_golden_blend_scaffold()
 
     return "\n".join(
@@ -148,16 +212,28 @@ def build_user_prompt(prompt: str, spec: dict[str, Any], solver_name: str, top_k
             "Generate one executable Python script for this linear blend optimization problem.",
             "Output only Python code. No markdown. No explanation.",
             "",
-            "Original user prompt:",
+            "You are given a validated structured spec and a formulation plan.",
+            "The original natural-language prompt is reference only.",
+            "Do not reinterpret the original prompt.",
+            "Do not change units, bounds, source names, quality names, or objective.",
+            "Use the structured spec as the single source of truth.",
+            "",
+            "Original user prompt for reference only:",
             prompt,
+            "",
+            "Validated structured spec:",
+            spec_json,
+            "",
+            "Formulation plan:",
+            formulation_plan_json,
+            "",
+            "Required result JSON contract:",
+            json.dumps(formulation_plan["required_result_contract"], indent=2),
             "",
             "Golden generic Pyomo scaffold to copy exactly. Copy this structure. Replace only SPEC and SOLVER_NAME. Do not invent a new Pyomo variable structure.",
             "```python",
             load_golden_blend_scaffold(),
             "```",
-            "",
-            "Structured spec:",
-            spec_json,
             "",
             "Solver name:",
             solver_name,
