@@ -179,3 +179,12 @@ def test_unit_aware_quality_normalization_and_direction_correction():
     assert corrected["quality_upper_bounds"]["sulfur"] == 0.015
     assert corrected["sources"][0]["qualities"]["viscosity"] == 15.0
     assert corrected["sources"][0]["qualities"]["api_gravity"] == 38.0
+
+
+def test_extract_first_json_object_cleans_barrel_conversion_expression():
+    text = '{"problem_type": "general_blend_cost_optimization", "product_mass_kg": 600, "sources": [{"name": "Component A", "cost_per_kg": 80, "qualities": {"octane": 90}, "max_available_kg": 500 * 42}], "quality_lower_bounds": {"octane": 98}}'
+
+    parsed = extractor.extract_first_json_object(text)
+
+    assert parsed["product_mass_kg"] == 600
+    assert parsed["sources"][0]["max_available_kg"] == 500

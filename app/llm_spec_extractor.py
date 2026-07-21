@@ -15,8 +15,39 @@ class SpecExtractionError(RuntimeError):
     pass
 
 
+def clean_common_json_mistakes(text: str) -> str:
+    cleaned = text
+
+    # LLMs sometimes convert barrels to gallons inside JSON, e.g.
+    # "max_available_kg": 500 * 42
+    # Our normalized schema keeps the original numeric blend unit, so this should be 500.
+    cleaned = re.sub(
+        r'("(?:product_mass_kg|max_available_kg|min_required_kg)"\s*:\s*)([-+]?\d+(?:\.\d+)?)\s*\*\s*42',
+        r'\1\2',
+        cleaned,
+    )
+
+    # Same issue with spaces around multiplication and decimal values.
+    cleaned = re.sub(
+        r'("(?:product_mass_kg|max_available_kg|min_required_kg)"\s*:\s*)([-+]?\d+(?:\.\d+)?)\s*x\s*42',
+        r'\1\2',
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    # Convert JSON-invalid unlimited tokens to null.
+    cleaned = re.sub(
+        r'("(?:max_available_kg|min_required_kg)"\s*:\s*)unlimited',
+        r'\1null',
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    return cleaned
+
+
 def extract_first_json_object(text: str) -> dict[str, Any]:
-    cleaned = text.strip()
+    cleaned = clean_common_json_mistakes(text.strip())
 
     # Some LLM/test outputs contain literal escaped newlines and quotes.
     # Convert those into normal JSON text before scanning.
@@ -92,6 +123,7 @@ PHYSICAL_QUALITY_KEYS = {
     "brittleness",
     "temperature",
     "pressure",
+    "vapor_pressure",
     "flash_point",
     "boiling_point",
 }
@@ -237,7 +269,7 @@ def infer_quality_direction_from_prompt(prompt: str, quality_name: str) -> str |
         return candidates[0][1]
 
     default_lower = {"purity", "octane", "strength", "api_gravity", "iron", "protein"}
-    default_upper = {"sulfur", "sulphur", "impurity", "viscosity", "brittleness", "fiber", "fibre", "ash", "silica", "moisture", "rvp"}
+    default_upper = {"sulfur", "sulphur", "impurity", "viscosity", "brittleness", "fiber", "fibre", "ash", "silica", "moisture", "rvp", "vapor_pressure"}
 
     key = normalize_key(quality_name)
 
@@ -373,15 +405,23 @@ Use this normalized schema:
 }
 
 Important rules:
-- Convert percentages to fractions.
+- Convert explicit percentages to fractions.
 - 9 percent becomes 0.09.
+- 9% becomes 0.09.
+- Do not divide physical properties by 100 unless the prompt explicitly says percent or %.
+- Do not scale octane, vapor pressure, API gravity, viscosity, RVP, density, strength, flash point, temperature, or pressure.
 - at least means quality_lower_bounds.
 - minimum means quality_lower_bounds unless it describes source usage.
 - at most means quality_upper_bounds.
 - maximum means quality_upper_bounds unless it describes source availability.
-- Keep arbitrary quality names such as protein, fiber, sulfur, ash, iron, grade, purity, octane.
+- Octane, purity, API gravity, strength, protein, and iron are usually lower-bound qualities.
+- Sulfur, impurity, vapor pressure, viscosity, RVP, brittleness, fiber, ash, silica, and moisture are usually upper-bound qualities.
+- Keep arbitrary quality names such as protein, fiber, sulfur, ash, iron, grade, purity, octane, vapor pressure.
 - Use kg as the normalized product mass unit if the prompt gives kg.
+- If the prompt gives barrels, bbl, tons, tonnes, gallons, or liters, keep the numeric amount but store it in product_mass_kg for this normalized schema. Do not convert barrels to gallons. Do not multiply bbl by 42.
+- If total product demand says at least X and all source costs are positive, use product_mass_kg = X because the minimum-cost LP will not overproduce.
 - If a source has an availability limit, use max_available_kg.
+- If a source says unlimited available, omit max_available_kg or set it to null.
 - If a source must be used at least a certain amount, use min_required_kg.
 """
 
@@ -421,6 +461,40 @@ Return a corrected normalized JSON spec only.
 """
 
 
+def repair_malformed_json_response(
+    prompt: str,
+    domain_context: str,
+    raw_response: str,
+    parse_error: Exception,
+) -> str:
+    repair_prompt = f"""The previous response was supposed to be one strict JSON object, but it was malformed.
+
+Original user prompt:
+{prompt}
+
+Retrieved domain context:
+{domain_context}
+
+Malformed response:
+{raw_response}
+
+JSON parse error:
+{parse_error}
+
+Return one corrected valid JSON object only.
+Do not include markdown.
+Do not explain.
+Use double quotes for all JSON keys and string values.
+Use null for missing optional numeric values.
+Do not include trailing commas.
+"""
+
+    return llm_client.call_llm_text(
+        build_extraction_system_prompt(),
+        repair_prompt,
+    )
+
+
 def extract_general_blend_spec(
     prompt: str,
     trace_dir: Path | None = None,
@@ -434,7 +508,26 @@ def extract_general_blend_spec(
     user_prompt = build_extraction_user_prompt(prompt, domain_context)
 
     raw_response = llm_client.call_llm_text(system_prompt, user_prompt)
-    parsed = extract_first_json_object(raw_response)
+
+    if trace_dir is not None:
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        (trace_dir / "raw_spec_extraction_response.txt").write_text(raw_response)
+
+    try:
+        parsed = extract_first_json_object(raw_response)
+    except SpecExtractionError as exc:
+        repaired_json_response = repair_malformed_json_response(
+            prompt=prompt,
+            domain_context=domain_context,
+            raw_response=raw_response,
+            parse_error=exc,
+        )
+
+        if trace_dir is not None:
+            (trace_dir / "raw_spec_repair_response.txt").write_text(repaired_json_response)
+
+        parsed = extract_first_json_object(repaired_json_response)
+
     spec = normalize_general_blend_spec(parsed)
     errors = validate_general_blend_spec(spec)
 
