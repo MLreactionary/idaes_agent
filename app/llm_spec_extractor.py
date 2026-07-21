@@ -81,10 +81,57 @@ def normalize_number(value: Any) -> float:
     return float(value)
 
 
-def normalize_fraction(value: Any) -> float:
-    number = normalize_number(value)
+PHYSICAL_QUALITY_KEYS = {
+    "api_gravity",
+    "api",
+    "viscosity",
+    "rvp",
+    "octane",
+    "density",
+    "strength",
+    "brittleness",
+    "temperature",
+    "pressure",
+    "flash_point",
+    "boiling_point",
+}
 
-    if number > 1.0 and number <= 100.0:
+COMPOSITION_QUALITY_KEYS = {
+    "purity",
+    "impurity",
+    "sulfur",
+    "sulphur",
+    "protein",
+    "fiber",
+    "fibre",
+    "ash",
+    "iron",
+    "silica",
+    "moisture",
+    "fat",
+    "nitrogen",
+    "phosphorus",
+    "zinc",
+    "copper",
+    "nickel",
+    "aluminum",
+    "aluminium",
+}
+
+
+def normalize_fraction(value: Any, quality_name: str | None = None) -> float:
+    number = normalize_number(value)
+    key = normalize_key(quality_name or "")
+
+    if isinstance(value, str):
+        lowered = value.lower()
+        if "%" in lowered or "percent" in lowered or "percentage" in lowered:
+            return number / 100.0
+
+    if key in PHYSICAL_QUALITY_KEYS:
+        return number
+
+    if key in COMPOSITION_QUALITY_KEYS and number > 1.0 and number <= 100.0:
         return number / 100.0
 
     return number
@@ -117,7 +164,8 @@ def normalize_general_blend_spec(spec: dict[str, Any]) -> dict[str, Any]:
         qualities = {}
 
         for quality_name, quality_value in source_out.get("qualities", {}).items():
-            qualities[normalize_key(quality_name)] = normalize_fraction(quality_value)
+            quality_key = normalize_key(quality_name)
+            qualities[quality_key] = normalize_fraction(quality_value, quality_key)
 
         source_out["qualities"] = qualities
         sources.append(source_out)
@@ -127,11 +175,112 @@ def normalize_general_blend_spec(spec: dict[str, Any]) -> dict[str, Any]:
     for field in ["quality_lower_bounds", "quality_upper_bounds", "quality_targets"]:
         if field in normalized and normalized[field] is not None:
             normalized[field] = {
-                normalize_key(name): normalize_fraction(value)
+                normalize_key(name): normalize_fraction(value, normalize_key(name))
                 for name, value in normalized[field].items()
             }
 
     return normalized
+
+
+def infer_quality_direction_from_prompt(prompt: str, quality_name: str) -> str | None:
+    text = re.sub(r"\s+", " ", prompt.lower())
+    quality_text = quality_name.replace("_", " ")
+
+    aliases = {quality_text}
+    if quality_name == "api_gravity":
+        aliases.update({"api gravity", "api"})
+    if quality_name == "sulphur":
+        aliases.add("sulfur")
+    if quality_name == "sulfur":
+        aliases.add("sulphur")
+
+    lower_markers = [
+        "at least",
+        "minimum",
+        "min",
+        "no less than",
+        "greater than or equal",
+        "not less than",
+    ]
+    upper_markers = [
+        "at most",
+        "maximum",
+        "max",
+        "no more than",
+        "less than or equal",
+        "not more than",
+    ]
+
+    candidates: list[tuple[int, str]] = []
+
+    for alias in aliases:
+        for marker in lower_markers:
+            patterns = [
+                rf"{re.escape(alias)}[^.;,]{{0,60}}{re.escape(marker)}",
+                rf"{re.escape(marker)}[^.;,]{{0,60}}{re.escape(alias)}",
+            ]
+            for pattern in patterns:
+                for match in re.finditer(pattern, text):
+                    candidates.append((len(match.group(0)), "lower"))
+
+        for marker in upper_markers:
+            patterns = [
+                rf"{re.escape(alias)}[^.;,]{{0,60}}{re.escape(marker)}",
+                rf"{re.escape(marker)}[^.;,]{{0,60}}{re.escape(alias)}",
+            ]
+            for pattern in patterns:
+                for match in re.finditer(pattern, text):
+                    candidates.append((len(match.group(0)), "upper"))
+
+    if candidates:
+        candidates.sort(key=lambda item: item[0])
+        return candidates[0][1]
+
+    default_lower = {"purity", "octane", "strength", "api_gravity", "iron", "protein"}
+    default_upper = {"sulfur", "sulphur", "impurity", "viscosity", "brittleness", "fiber", "fibre", "ash", "silica", "moisture", "rvp"}
+
+    key = normalize_key(quality_name)
+
+    if key in default_lower:
+        return "lower"
+
+    if key in default_upper:
+        return "upper"
+
+    return None
+
+def apply_prompt_based_quality_bound_corrections(
+    spec: dict[str, Any],
+    prompt: str,
+) -> dict[str, Any]:
+    corrected = dict(spec)
+    lower_bounds = dict(corrected.get("quality_lower_bounds") or {})
+    upper_bounds = dict(corrected.get("quality_upper_bounds") or {})
+
+    all_quality_names = set(lower_bounds) | set(upper_bounds)
+
+    for quality_name in list(all_quality_names):
+        direction = infer_quality_direction_from_prompt(prompt, quality_name)
+
+        if direction == "lower" and quality_name in upper_bounds:
+            value = upper_bounds.pop(quality_name)
+            lower_bounds[quality_name] = value
+
+        elif direction == "upper" and quality_name in lower_bounds:
+            value = lower_bounds.pop(quality_name)
+            upper_bounds[quality_name] = value
+
+    if lower_bounds:
+        corrected["quality_lower_bounds"] = lower_bounds
+    else:
+        corrected.pop("quality_lower_bounds", None)
+
+    if upper_bounds:
+        corrected["quality_upper_bounds"] = upper_bounds
+    else:
+        corrected.pop("quality_upper_bounds", None)
+
+    return corrected
 
 
 def validate_general_blend_spec(spec: dict[str, Any]) -> list[str]:

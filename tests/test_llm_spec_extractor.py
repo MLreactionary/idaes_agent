@@ -128,3 +128,54 @@ def test_validate_general_blend_spec_rejects_missing_quality_bound():
     errors = extractor.validate_general_blend_spec(spec)
 
     assert any("quality lower or upper bound" in error for error in errors)
+
+
+def test_unit_aware_quality_normalization_and_direction_correction():
+    prompt = (
+        "The final feedstock must have average sulfur at most 0.015, "
+        "average viscosity at most 40.0, and average API gravity at least 31.0."
+    )
+    raw_spec = {
+        "problem_type": "general_blend_cost_optimization",
+        "objective": "minimize_cost",
+        "product_mass_kg": 5000,
+        "quality_upper_bounds": {
+            "sulfur": 0.015,
+            "viscosity": 40.0,
+            "api_gravity": 31.0,
+        },
+        "sources": [
+            {
+                "name": "Crude 1",
+                "cost_per_kg": 75,
+                "max_available_kg": 3000,
+                "qualities": {
+                    "sulfur": 0.005,
+                    "viscosity": 15.0,
+                    "api_gravity": 38.0,
+                },
+            },
+            {
+                "name": "Crude 2",
+                "cost_per_kg": 60,
+                "max_available_kg": 2500,
+                "qualities": {
+                    "sulfur": 0.018,
+                    "viscosity": 45.0,
+                    "api_gravity": 29.0,
+                },
+            },
+        ],
+    }
+
+    normalized = extractor.normalize_general_blend_spec(raw_spec)
+    corrected = extractor.apply_prompt_based_quality_bound_corrections(
+        normalized,
+        prompt,
+    )
+
+    assert corrected["quality_lower_bounds"]["api_gravity"] == 31.0
+    assert corrected["quality_upper_bounds"]["viscosity"] == 40.0
+    assert corrected["quality_upper_bounds"]["sulfur"] == 0.015
+    assert corrected["sources"][0]["qualities"]["viscosity"] == 15.0
+    assert corrected["sources"][0]["qualities"]["api_gravity"] == 38.0
